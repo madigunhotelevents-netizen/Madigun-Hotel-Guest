@@ -1,0 +1,50 @@
+[
+  {
+    "id": "req-1787813276613-3vabi",
+    "roomNumber": "204",
+    "category": "Housekeeping",
+    "additionalMessage": "Extra towels needed",
+    "status": "NEW",
+    "isEmergency": false,
+    "createdAt": 1787813276613
+  },
+  {
+    "id": "req-init-101",
+    "roomNumber": "101",
+    "category": "Extra Pillow / Blanket",
+    "additionalMessage": "Please send two pillows.",
+    "status": "NEW",
+    "isEmergency": false,
+    "createdAt": 1787813031983
+  },
+  {
+    "id": "req-init-205",
+    "roomNumber": "205",
+    "category": "Housekeeping",
+    "additionalMessage": "Please clean the room.",
+    "status": "NEW",
+    "isEmergency": false,
+    "createdAt": 1787813211983
+  },
+  {
+    "id": "req-init-308",
+    "roomNumber": "308",
+    "category": "Water",
+    "additionalMessage": "2 bottles of chilled still water, please.",
+    "status": "IN_PROGRESS",
+    "isEmergency": false,
+    "createdAt": 1787812371983,
+    "acceptedAt": 1787812791983
+  },
+  {
+    "id": "req-init-104",
+    "roomNumber": "104",
+    "category": "Toiletries",
+    "additionalMessage": "Fresh bath towels and dental kit",
+    "status": "COMPLETED",
+    "isEmergency": false,
+    "createdAt": 1787810571983,
+    "acceptedAt": 1787811171983,
+    "completedAt": 1787812071983
+  }
+]
