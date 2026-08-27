@@ -1,0 +1,59 @@
+{
+  "entities": {
+    "HotelRequest": {
+      "title": "HotelRequest",
+      "description": "Guest service and assistance requests submitted by hotel rooms",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "roomNumber": { "type": "string" },
+        "category": { "type": "string" },
+        "additionalMessage": { "type": "string" },
+        "status": { "type": "string", "enum": ["NEW", "IN_PROGRESS", "COMPLETED", "CANCELLED"] },
+        "isEmergency": { "type": "boolean" },
+        "createdAt": { "type": "number" },
+        "acceptedAt": { "type": "number" },
+        "completedAt": { "type": "number" },
+        "assignedStaffId": { "type": "string" },
+        "assignedStaffName": { "type": "string" },
+        "completedByStaffId": { "type": "string" },
+        "completedByStaffName": { "type": "string" }
+      },
+      "required": ["id", "roomNumber", "category", "status", "createdAt"]
+    },
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Hotel staff and developer team profiles",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "username": { "type": "string" },
+        "password": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "role": { "type": "string", "enum": ["developer", "staff"] },
+        "roleTitle": { "type": "string" },
+        "department": { "type": "string" },
+        "phone": { "type": "string" },
+        "shift": { "type": "string" },
+        "bio": { "type": "string" },
+        "avatarColor": { "type": "string" },
+        "isPrimaryDeveloper": { "type": "boolean" },
+        "dutyStatus": { "type": "string", "enum": ["ON_DUTY", "ON_BREAK", "OFF_DUTY"] },
+        "createdAt": { "type": "number" },
+        "lastLoginAt": { "type": "number" }
+      },
+      "required": ["id", "username", "name", "role", "dutyStatus"]
+    }
+  },
+  "firestore": {
+    "/requests/{requestId}": {
+      "schema": "HotelRequest",
+      "description": "Collection of all guest assistance requests"
+    },
+    "/accounts/{accountId}": {
+      "schema": "UserProfile",
+      "description": "Collection of all staff and developer accounts"
+    }
+  }
+}

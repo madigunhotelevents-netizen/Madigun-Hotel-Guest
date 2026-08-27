@@ -1,8 +1,20 @@
 import { UserProfile, DutyStatus } from '../types/hotel';
+import { db } from './firebase';
+import {
+  collection,
+  doc,
+  setDoc,
+  updateDoc,
+  deleteDoc,
+  onSnapshot,
+  getDocs,
+  writeBatch
+} from 'firebase/firestore';
 
 const ACCOUNTS_STORAGE_KEY = 'madigun_hotel_accounts_v1';
 const CURRENT_USER_KEY = 'madigun_hotel_current_user_v1';
 const AUTH_CHANNEL_NAME = 'madigun_hotel_auth_channel';
+const FIRESTORE_ACCOUNTS_COLLECTION = 'accounts';
 
 export const INITIAL_ACCOUNTS: UserProfile[] = [
   {
@@ -96,28 +108,96 @@ function notifyAuthChange(type: string, data?: any) {
 
 let accountsCache: UserProfile[] = [];
 let isAccountsInitialFetchDone = false;
+let accountsFirestoreUnsubscribe: (() => void) | null = null;
 
-// Background fetch accounts from server
+function initAccountsFirestoreRealtimeSync() {
+  if (accountsFirestoreUnsubscribe || typeof window === 'undefined') return;
+
+  try {
+    const accsRef = collection(db, FIRESTORE_ACCOUNTS_COLLECTION);
+    accountsFirestoreUnsubscribe = onSnapshot(
+      accsRef,
+      (snapshot) => {
+        if (snapshot.empty && !isAccountsInitialFetchDone) {
+          seedInitialFirestoreAccounts();
+          return;
+        }
+
+        const freshList: UserProfile[] = [];
+        snapshot.forEach((docSnap) => {
+          const item = { id: docSnap.id, ...(docSnap.data() as Omit<UserProfile, 'id'>) } as UserProfile;
+          freshList.push(item);
+        });
+
+        if (freshList.length > 0) {
+          accountsCache = freshList;
+          isAccountsInitialFetchDone = true;
+          try {
+            localStorage.setItem(ACCOUNTS_STORAGE_KEY, JSON.stringify(freshList));
+          } catch {}
+          notifyAuthChange('ACCOUNTS_UPDATED');
+        }
+      },
+      (err) => {
+        console.warn('Firestore accounts sync error:', err);
+      }
+    );
+  } catch (err) {
+    console.warn('Could not setup Firestore accounts listener:', err);
+  }
+}
+
+async function seedInitialFirestoreAccounts() {
+  try {
+    const batch = writeBatch(db);
+    INITIAL_ACCOUNTS.forEach((acc) => {
+      const docRef = doc(db, FIRESTORE_ACCOUNTS_COLLECTION, acc.id);
+      batch.set(docRef, acc);
+    });
+    await batch.commit();
+  } catch (err) {
+    console.warn('Failed to seed initial Firestore accounts:', err);
+  }
+}
+
+// Background fetch accounts from Firestore/Server
 export async function fetchAccountsFromServer(): Promise<UserProfile[]> {
   try {
-    const res = await fetch('/api/accounts', {
-      headers: { 'Accept': 'application/json' },
-      cache: 'no-store',
-    });
-    if (res.ok) {
-      const serverData = await res.json();
-      if (Array.isArray(serverData) && serverData.length > 0) {
-        accountsCache = serverData;
-        isAccountsInitialFetchDone = true;
-        try {
-          localStorage.setItem(ACCOUNTS_STORAGE_KEY, JSON.stringify(serverData));
-        } catch {}
-        notifyAuthChange('ACCOUNTS_UPDATED');
-        return serverData;
-      }
+    const accsRef = collection(db, FIRESTORE_ACCOUNTS_COLLECTION);
+    const snap = await getDocs(accsRef);
+    if (!snap.empty) {
+      const serverData: UserProfile[] = snap.docs.map((d) => ({
+        id: d.id,
+        ...(d.data() as Omit<UserProfile, 'id'>),
+      }));
+      accountsCache = serverData;
+      isAccountsInitialFetchDone = true;
+      try {
+        localStorage.setItem(ACCOUNTS_STORAGE_KEY, JSON.stringify(serverData));
+      } catch {}
+      notifyAuthChange('ACCOUNTS_UPDATED');
+      return serverData;
     }
-  } catch (err) {
-    // Fall back to local
+  } catch {
+    // Fallback to Express backend if exists
+    try {
+      const res = await fetch('/api/accounts', {
+        headers: { Accept: 'application/json' },
+        cache: 'no-store',
+      });
+      if (res.ok) {
+        const serverData = await res.json();
+        if (Array.isArray(serverData) && serverData.length > 0) {
+          accountsCache = serverData;
+          isAccountsInitialFetchDone = true;
+          try {
+            localStorage.setItem(ACCOUNTS_STORAGE_KEY, JSON.stringify(serverData));
+          } catch {}
+          notifyAuthChange('ACCOUNTS_UPDATED');
+          return serverData;
+        }
+      }
+    } catch {}
   }
   return accountsCache.length > 0 ? accountsCache : INITIAL_ACCOUNTS;
 }
@@ -135,6 +215,7 @@ if (typeof window !== 'undefined') {
   if (accountsCache.length === 0) {
     accountsCache = [...INITIAL_ACCOUNTS];
   }
+  initAccountsFirestoreRealtimeSync();
   fetchAccountsFromServer().catch(() => {});
 }
 
@@ -241,6 +322,15 @@ export function login(
   saveAllAccounts(updatedAccounts);
   setCurrentUser(updatedUser);
 
+  // Sync to Firestore
+  try {
+    const docRef = doc(db, FIRESTORE_ACCOUNTS_COLLECTION, updatedUser.id);
+    updateDoc(docRef, {
+      lastLoginAt: updatedUser.lastLoginAt,
+      dutyStatus: updatedUser.dutyStatus,
+    }).catch(() => {});
+  } catch {}
+
   return { success: true, user: updatedUser };
 }
 
@@ -302,14 +392,20 @@ export function createAccount(
   const updated = [created, ...accounts];
   saveAllAccounts(updated);
 
-  // Sync with server API
+  // Sync with Firestore
+  try {
+    const docRef = doc(db, FIRESTORE_ACCOUNTS_COLLECTION, created.id);
+    setDoc(docRef, created).catch((err) => {
+      console.warn('Firestore create account error:', err);
+    });
+  } catch {}
+
+  // Sync with Express API
   fetch('/api/accounts', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(created),
-  }).catch((err) => {
-    console.warn('Network error while saving account to server:', err);
-  });
+  }).catch(() => {});
 
   return { success: true, account: created };
 }
@@ -366,14 +462,20 @@ export function updateAccount(
   const updatedList = accounts.map((a) => (a.id === accountId ? updatedAccount : a));
   saveAllAccounts(updatedList);
 
+  // Sync update with Firestore
+  try {
+    const docRef = doc(db, FIRESTORE_ACCOUNTS_COLLECTION, accountId);
+    updateDoc(docRef, { ...updates, role: roleToSet, isPrimaryDeveloper: isPrimaryDev }).catch((err) => {
+      console.warn('Firestore update account error:', err);
+    });
+  } catch {}
+
   // Sync update with server API
   fetch(`/api/accounts/${encodeURIComponent(accountId)}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(updatedAccount),
-  }).catch((err) => {
-    console.warn('Network error while updating account on server:', err);
-  });
+  }).catch(() => {});
 
   // If actor edited their own profile, sync current user session
   if (isSelf) {
@@ -411,12 +513,18 @@ export function deleteAccount(
   const updatedList = accounts.filter((a) => a.id !== accountId);
   saveAllAccounts(updatedList);
 
+  // Sync delete with Firestore
+  try {
+    const docRef = doc(db, FIRESTORE_ACCOUNTS_COLLECTION, accountId);
+    deleteDoc(docRef).catch((err) => {
+      console.warn('Firestore delete account error:', err);
+    });
+  } catch {}
+
   // Sync delete with server API
   fetch(`/api/accounts/${encodeURIComponent(accountId)}`, {
     method: 'DELETE',
-  }).catch((err) => {
-    console.warn('Network error while deleting account on server:', err);
-  });
+  }).catch(() => {});
 
   return { success: true };
 }
@@ -432,6 +540,12 @@ export function setDutyStatus(
   const updated = { ...target, dutyStatus: status };
   const updatedList = accounts.map((a) => (a.id === userId ? updated : a));
   saveAllAccounts(updatedList);
+
+  // Sync duty status to Firestore
+  try {
+    const docRef = doc(db, FIRESTORE_ACCOUNTS_COLLECTION, userId);
+    updateDoc(docRef, { dutyStatus: status }).catch(() => {});
+  } catch {}
 
   // Sync duty status to server
   fetch(`/api/accounts/${encodeURIComponent(userId)}`, {
@@ -452,6 +566,8 @@ export function resetToDemoAccounts(): UserProfile[] {
   saveAllAccounts(INITIAL_ACCOUNTS);
   setCurrentUser(null);
 
+  seedInitialFirestoreAccounts();
+
   fetch('/api/accounts/reset', {
     method: 'POST',
   }).catch(() => {});
@@ -462,6 +578,8 @@ export function resetToDemoAccounts(): UserProfile[] {
 export function subscribeToAuthEvents(
   callback: (event: { type: string; data?: any }) => void
 ): () => void {
+  initAccountsFirestoreRealtimeSync();
+
   const handleMessage = (e: MessageEvent) => {
     if (e.data && e.data.type) {
       callback(e.data);

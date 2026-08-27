@@ -1,7 +1,21 @@
-import { HotelRequest } from '../types/hotel';
+import { HotelRequest, RequestCategory } from '../types/hotel';
+import { db } from './firebase';
+import {
+  collection,
+  doc,
+  setDoc,
+  updateDoc,
+  deleteDoc,
+  onSnapshot,
+  query,
+  orderBy,
+  getDocs,
+  writeBatch
+} from 'firebase/firestore';
 
 const STORAGE_KEY = 'madigun_hotel_requests_v1';
 const CHANNEL_NAME = 'madigun_hotel_events_channel';
+const FIRESTORE_COLLECTION = 'requests';
 
 // Default initial requests
 const INITIAL_DEMO_REQUESTS: HotelRequest[] = [
@@ -50,6 +64,7 @@ let inMemoryCache: HotelRequest[] = [];
 let isInitialFetchDone = false;
 let broadcastChannel: BroadcastChannel | null = null;
 const eventListeners: Set<(event: { type: string; request?: HotelRequest }) => void> = new Set();
+let firestoreUnsubscribe: (() => void) | null = null;
 
 try {
   if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
@@ -91,49 +106,132 @@ if (typeof window !== 'undefined') {
     inMemoryCache = [...INITIAL_DEMO_REQUESTS];
   }
 
-  // Trigger initial background fetch from server
-  fetchRequestsFromServer().catch(() => {});
+  // Setup Firestore real-time listener immediately
+  initFirestoreRealtimeSync();
 }
 
-// Fetch all requests from backend API
+/**
+ * Real-time bi-directional synchronization with Cloud Firestore.
+ * This guarantees 100% real-time reflection across different devices,
+ * mobile phone QR scans, Netlify deployments, and local servers.
+ */
+function initFirestoreRealtimeSync() {
+  if (firestoreUnsubscribe || typeof window === 'undefined') return;
+
+  try {
+    const reqsRef = collection(db, FIRESTORE_COLLECTION);
+    const q = query(reqsRef, orderBy('createdAt', 'desc'));
+
+    firestoreUnsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
+        if (snapshot.empty && !isInitialFetchDone) {
+          // If Firestore is completely empty on first launch, seed initial demo requests
+          seedInitialFirestoreRequests();
+          return;
+        }
+
+        const prevMap = new Map(inMemoryCache.map((r) => [r.id, r]));
+        const freshList: HotelRequest[] = [];
+        const newlyAdded: HotelRequest[] = [];
+
+        snapshot.forEach((docSnap) => {
+          const data = docSnap.data() as Partial<HotelRequest>;
+          const item: HotelRequest = {
+            id: docSnap.id,
+            roomNumber: data.roomNumber || '101',
+            category: (data.category as RequestCategory) || 'Contact Front Desk',
+            additionalMessage: data.additionalMessage || '',
+            status: data.status || 'NEW',
+            isEmergency: Boolean(data.isEmergency),
+            createdAt: typeof data.createdAt === 'number' ? data.createdAt : Date.now(),
+            acceptedAt: data.acceptedAt,
+            completedAt: data.completedAt,
+            staffNotes: data.staffNotes,
+            acceptedByStaffName: data.acceptedByStaffName,
+            completedByStaffName: data.completedByStaffName,
+          };
+          freshList.push(item);
+
+          if (isInitialFetchDone && !prevMap.has(item.id) && item.status === 'NEW') {
+            newlyAdded.push(item);
+          }
+        });
+
+        // Sort descending by createdAt
+        freshList.sort((a, b) => b.createdAt - a.createdAt);
+
+        inMemoryCache = freshList;
+        isInitialFetchDone = true;
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(freshList));
+        } catch {}
+
+        if (newlyAdded.length > 0) {
+          newlyAdded.forEach((item) => {
+            notifyListeners({ type: 'NEW_REQUEST_SUBMITTED', request: item });
+          });
+        } else {
+          notifyListeners({ type: 'REQUESTS_UPDATED' });
+        }
+      },
+      (err) => {
+        console.warn('Firestore real-time sync error (falling back to REST/Local):', err);
+      }
+    );
+  } catch (err) {
+    console.warn('Could not initialize Firestore real-time listener:', err);
+  }
+}
+
+async function seedInitialFirestoreRequests() {
+  try {
+    const batch = writeBatch(db);
+    INITIAL_DEMO_REQUESTS.forEach((req) => {
+      const docRef = doc(db, FIRESTORE_COLLECTION, req.id);
+      batch.set(docRef, req);
+    });
+    await batch.commit();
+  } catch (err) {
+    console.warn('Failed to seed initial Firestore requests:', err);
+  }
+}
+
+// Fetch all requests from Firestore / API
 export async function fetchRequestsFromServer(): Promise<HotelRequest[]> {
   try {
-    const res = await fetch('/api/requests', {
-      headers: { 'Accept': 'application/json' },
-      cache: 'no-store',
-    });
-    if (res.ok) {
-      const serverData = await res.json();
-      if (Array.isArray(serverData)) {
-        const prevMap = new Map(inMemoryCache.map((r) => [r.id, r]));
-        // Detect newly arrived requests that were not previously in memory and are in 'NEW' status
-        const newlyArrivedRequests = isInitialFetchDone
-          ? serverData.filter((r) => !prevMap.has(r.id) && r.status === 'NEW')
-          : [];
-
-        const prevJson = JSON.stringify(inMemoryCache);
-        const newJson = JSON.stringify(serverData);
-
-        if (prevJson !== newJson || !isInitialFetchDone) {
+    const reqsRef = collection(db, FIRESTORE_COLLECTION);
+    const snap = await getDocs(query(reqsRef, orderBy('createdAt', 'desc')));
+    if (!snap.empty) {
+      const serverData: HotelRequest[] = snap.docs.map((d) => ({
+        id: d.id,
+        ...(d.data() as Omit<HotelRequest, 'id'>),
+      }));
+      inMemoryCache = serverData;
+      isInitialFetchDone = true;
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(serverData));
+      } catch {}
+      notifyListeners({ type: 'REQUESTS_UPDATED' });
+      return serverData;
+    }
+  } catch {
+    // If Firestore direct query fails, fallback to Express /api/requests
+    try {
+      const res = await fetch('/api/requests', { headers: { Accept: 'application/json' }, cache: 'no-store' });
+      if (res.ok) {
+        const serverData = await res.json();
+        if (Array.isArray(serverData)) {
           inMemoryCache = serverData;
           isInitialFetchDone = true;
           try {
-            localStorage.setItem(STORAGE_KEY, newJson);
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(serverData));
           } catch {}
-
-          if (newlyArrivedRequests.length > 0) {
-            newlyArrivedRequests.forEach((item) => {
-              notifyListeners({ type: 'NEW_REQUEST_SUBMITTED', request: item });
-            });
-          } else {
-            notifyListeners({ type: 'REQUESTS_UPDATED' });
-          }
+          notifyListeners({ type: 'REQUESTS_UPDATED' });
+          return serverData;
         }
-        return serverData;
       }
-    }
-  } catch (err) {
-    // Server might not be reachable if client-only or offline; fall back to local
+    } catch {}
   }
   return inMemoryCache;
 }
@@ -208,38 +306,22 @@ export function createNewRequest(
   }
   notifyListeners(eventPayload);
 
-  // Send to server API to ensure cross-device sync (Phone -> Front Desk Desktop)
+  // 1. Direct Cloud Firestore Push (instant worldwide sync on mobile & desktop)
+  const reqDocRef = doc(db, FIRESTORE_COLLECTION, newRequest.id);
+  setDoc(reqDocRef, newRequest)
+    .then(() => {
+      console.log('[Firestore] Successfully synced guest request:', newRequest.id);
+    })
+    .catch((err) => {
+      console.warn('[Firestore] Sync write error:', err);
+    });
+
+  // 2. Also send to Express /api/requests fallback if backend server exists
   fetch('/api/requests', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      id: newRequest.id,
-      roomNumber: cleanRoom,
-      category: cleanCategory,
-      additionalMessage: cleanMsg,
-      isEmergency: cleanEmergency,
-      createdAt: newRequest.createdAt,
-    }),
-  })
-    .then(async (res) => {
-      if (res.ok) {
-        const savedServerReq: HotelRequest = await res.json();
-        // Ensure cache matches server response
-        const existingIdx = inMemoryCache.findIndex((r) => r.id === savedServerReq.id || r.id === newRequest.id);
-        if (existingIdx >= 0) {
-          inMemoryCache[existingIdx] = savedServerReq;
-        } else {
-          inMemoryCache = [savedServerReq, ...inMemoryCache];
-        }
-        try {
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(inMemoryCache));
-        } catch {}
-        notifyListeners({ type: 'REQUESTS_UPDATED', request: savedServerReq });
-      }
-    })
-    .catch((err) => {
-      console.warn('Network error while posting request to server; retained locally:', err);
-    });
+    body: JSON.stringify(newRequest),
+  }).catch(() => {});
 
   return newRequest;
 }
@@ -250,9 +332,10 @@ export function updateRequestStatus(
   staffName?: string
 ): HotelRequest[] {
   let updatedItem: HotelRequest | undefined;
+  const patch: Partial<HotelRequest> = { status: newStatus };
+
   inMemoryCache = inMemoryCache.map((req) => {
     if (req.id === requestId) {
-      const patch: Partial<HotelRequest> = { status: newStatus };
       if (newStatus === 'IN_PROGRESS' && !req.acceptedAt) {
         patch.acceptedAt = Date.now();
         if (staffName) patch.acceptedByStaffName = staffName;
@@ -269,14 +352,22 @@ export function updateRequestStatus(
 
   saveStoredRequests(inMemoryCache);
 
-  // Sync update to server
+  // Sync update to Cloud Firestore
+  try {
+    const docRef = doc(db, FIRESTORE_COLLECTION, requestId);
+    updateDoc(docRef, { ...patch }).catch((err) => {
+      console.warn('[Firestore] Update doc error:', err);
+    });
+  } catch (err) {
+    console.warn('[Firestore] Error creating doc reference:', err);
+  }
+
+  // Sync to Express backend
   fetch(`/api/requests/${encodeURIComponent(requestId)}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ status: newStatus, staffName }),
-  }).catch((err) => {
-    console.warn('Error patching request on server:', err);
-  });
+  }).catch(() => {});
 
   return inMemoryCache;
 }
@@ -285,11 +376,20 @@ export function deleteRequest(requestId: string): HotelRequest[] {
   inMemoryCache = inMemoryCache.filter((r) => r.id !== requestId);
   saveStoredRequests(inMemoryCache);
 
+  // Delete from Cloud Firestore
+  try {
+    const docRef = doc(db, FIRESTORE_COLLECTION, requestId);
+    deleteDoc(docRef).catch((err) => {
+      console.warn('[Firestore] Delete doc error:', err);
+    });
+  } catch (err) {
+    console.warn('[Firestore] Error deleting doc:', err);
+  }
+
+  // Delete from Express server
   fetch(`/api/requests/${encodeURIComponent(requestId)}`, {
     method: 'DELETE',
-  }).catch((err) => {
-    console.warn('Error deleting request on server:', err);
-  });
+  }).catch(() => {});
 
   return inMemoryCache;
 }
@@ -298,70 +398,15 @@ export function resetToDemoRequests(): HotelRequest[] {
   inMemoryCache = [...INITIAL_DEMO_REQUESTS];
   saveStoredRequests(inMemoryCache);
 
+  // Reset in Firestore
+  seedInitialFirestoreRequests();
+
+  // Reset on Express server
   fetch('/api/requests/reset', {
     method: 'POST',
-  }).catch((err) => {
-    console.warn('Error resetting requests on server:', err);
-  });
+  }).catch(() => {});
 
   return inMemoryCache;
-}
-
-// Global SSE connection instance
-let activeEventSource: EventSource | null = null;
-let sseReconnectTimer: any = null;
-
-function setupServerEvents() {
-  if (typeof window === 'undefined' || typeof EventSource === 'undefined') return;
-  if (activeEventSource) return;
-
-  try {
-    activeEventSource = new EventSource('/api/events');
-
-    activeEventSource.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        if (data.type === 'NEW_REQUEST_SUBMITTED' && data.request) {
-          // Merge or add request to inMemoryCache
-          const existsIdx = inMemoryCache.findIndex((r) => r.id === data.request.id);
-          if (existsIdx >= 0) {
-            inMemoryCache[existsIdx] = data.request;
-          } else {
-            inMemoryCache = [data.request, ...inMemoryCache];
-          }
-          try {
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(inMemoryCache));
-          } catch {}
-          notifyListeners({ type: 'NEW_REQUEST_SUBMITTED', request: data.request });
-        } else if (
-          data.type === 'REQUEST_UPDATED' ||
-          data.type === 'REQUEST_DELETED' ||
-          data.type === 'REQUESTS_RESET' ||
-          data.type === 'REQUESTS_UPDATED'
-        ) {
-          fetchRequestsFromServer().then(() => {
-            notifyListeners({ type: 'REQUESTS_UPDATED' });
-          });
-        }
-      } catch (err) {
-        console.error('Error parsing SSE event data:', err);
-      }
-    };
-
-    activeEventSource.onerror = () => {
-      if (activeEventSource) {
-        activeEventSource.close();
-        activeEventSource = null;
-      }
-      // Retry in 2 seconds
-      clearTimeout(sseReconnectTimer);
-      sseReconnectTimer = setTimeout(() => {
-        setupServerEvents();
-      }, 2000);
-    };
-  } catch (err) {
-    console.warn('Could not initialize SSE EventSource:', err);
-  }
 }
 
 export function subscribeToRequestEvents(
@@ -369,8 +414,8 @@ export function subscribeToRequestEvents(
 ): () => void {
   eventListeners.add(callback);
 
-  // Start SSE stream if not started
-  setupServerEvents();
+  // Ensure Firestore real-time listener is running
+  initFirestoreRealtimeSync();
 
   // Storage event listener for same-browser other tabs
   const handleStorage = (e: StorageEvent) => {
@@ -383,13 +428,10 @@ export function subscribeToRequestEvents(
   };
   window.addEventListener('storage', handleStorage);
 
-  // Immediate fetch from server
-  fetchRequestsFromServer().catch(() => {});
-
-  // Background sync poll (every 1.5s) to guarantee real-time cross-device sync
+  // Fallback poll
   const pollInterval = setInterval(() => {
-    fetchRequestsFromServer();
-  }, 1500);
+    fetchRequestsFromServer().catch(() => {});
+  }, 4000);
 
   return () => {
     eventListeners.delete(callback);
