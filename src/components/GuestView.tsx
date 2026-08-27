@@ -15,12 +15,24 @@ import {
   RefreshCw,
   Moon,
   Sun,
+  ShieldAlert,
+  PhoneCall,
+  KeyRound,
+  Lock,
+  ArrowRight,
+  ShieldCheck,
 } from 'lucide-react';
-import { CATEGORIES_CONFIG, CategoryInfo, HotelRequest } from '../types/hotel';
+import { CATEGORIES_CONFIG, CategoryInfo, HotelRequest, RoomStay } from '../types/hotel';
 import { RequestModal } from './RequestModal';
 import { EmergencyModal } from './EmergencyModal';
 import { ConfirmationView } from './ConfirmationView';
-import { createNewRequest, getStoredRequests, subscribeToRequestEvents } from '../services/storageService';
+import {
+  createNewRequest,
+  getStoredRequests,
+  subscribeToRequestEvents,
+  getRoomStay,
+  verifyRoomAccessCode,
+} from '../services/storageService';
 import { playConciergeBell, playUrgentAlert, playSuccessChime } from '../services/soundService';
 import { useServiceSchedule } from '../services/scheduleService';
 
@@ -39,14 +51,65 @@ export const GuestView: React.FC<GuestViewProps> = ({
   const [isEmergencyModalOpen, setIsEmergencyModalOpen] = useState(false);
   const [activeConfirmation, setActiveConfirmation] = useState<HotelRequest | null>(null);
   const [roomRequests, setRoomRequests] = useState<HotelRequest[]>([]);
+  const [roomStay, setRoomStay] = useState<RoomStay>(() => getRoomStay(roomNumber));
+  
+  // Access Passcode State
+  const [enteredPasscode, setEnteredPasscode] = useState<string>('');
+  const [passcodeError, setPasscodeError] = useState<string | null>(null);
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
 
   const schedule = useServiceSchedule();
 
-  // Sync active requests for this room
+  // Check URL params or sessionStorage for room access code
+  const checkAccessAuth = (currentStay: RoomStay) => {
+    if (typeof window === 'undefined') return true;
+
+    // If room is checked out, no access is allowed
+    if (currentStay.status === 'CHECKED_OUT') {
+      setIsAuthenticated(false);
+      return false;
+    }
+
+    // Check URL search parameters (?code=MDG-1014 or ?c=1014)
+    const params = new URLSearchParams(window.location.search);
+    const urlCode = params.get('code') || params.get('c') || params.get('passcode');
+
+    if (urlCode && verifyRoomAccessCode(roomNumber, urlCode)) {
+      try {
+        sessionStorage.setItem(`madigun_room_auth_${roomNumber}`, urlCode);
+      } catch {}
+      setIsAuthenticated(true);
+      return true;
+    }
+
+    // Check saved session code
+    try {
+      const savedCode = sessionStorage.getItem(`madigun_room_auth_${roomNumber}`);
+      if (savedCode && verifyRoomAccessCode(roomNumber, savedCode)) {
+        setIsAuthenticated(true);
+        return true;
+      }
+    } catch {}
+
+    // If room stay doesn't have an accessCode requirement, grant access
+    if (!currentStay.accessCode) {
+      setIsAuthenticated(true);
+      return true;
+    }
+
+    setIsAuthenticated(false);
+    return false;
+  };
+
+  // Sync active requests and room stay status for this room
   const refreshRoomData = () => {
     const all = getStoredRequests();
     const forThisRoom = all.filter((r) => r.roomNumber.toLowerCase() === roomNumber.toLowerCase());
     setRoomRequests(forThisRoom);
+    
+    const freshStay = getRoomStay(roomNumber);
+    setRoomStay(freshStay);
+    checkAccessAuth(freshStay);
 
     // If we have an active confirmation, keep its status updated in real-time!
     if (activeConfirmation) {
@@ -68,8 +131,34 @@ export const GuestView: React.FC<GuestViewProps> = ({
     return unsubscribe;
   }, [roomNumber, activeConfirmation]);
 
+  // Handle manually entering room access passcode
+  const handleVerifyPasscode = (e: React.FormEvent) => {
+    e.preventDefault();
+    setPasscodeError(null);
+
+    const cleanInput = enteredPasscode.trim().toUpperCase();
+    if (!cleanInput) {
+      setPasscodeError('Please enter the access passcode found on your keycard.');
+      return;
+    }
+
+    if (verifyRoomAccessCode(roomNumber, cleanInput)) {
+      try {
+        sessionStorage.setItem(`madigun_room_auth_${roomNumber}`, cleanInput);
+      } catch {}
+      setIsAuthenticated(true);
+      setPasscodeError(null);
+      if (soundEnabled) {
+        playSuccessChime();
+      }
+    } else {
+      setPasscodeError('Invalid passcode for Room ' + roomNumber + '. Please check your keycard slip or contact Front Desk.');
+    }
+  };
+
   // Handle service button click
   const handleSelectService = (cat: CategoryInfo) => {
+    if (roomStay.status === 'CHECKED_OUT' || !isAuthenticated) return;
     if (cat.isEmergency) {
       setIsEmergencyModalOpen(true);
     } else {
@@ -80,7 +169,7 @@ export const GuestView: React.FC<GuestViewProps> = ({
 
   // Submit standard request
   const handleStandardSubmit = (additionalMessage: string) => {
-    if (!selectedCategory) return;
+    if (!selectedCategory || roomStay.status === 'CHECKED_OUT') return;
     const req = createNewRequest(roomNumber, selectedCategory.id, additionalMessage, false);
     setIsRequestModalOpen(false);
     setSelectedCategory(null);
@@ -93,34 +182,13 @@ export const GuestView: React.FC<GuestViewProps> = ({
 
   // Submit emergency request
   const handleEmergencySubmit = (urgentNotes: string) => {
+    if (roomStay.status === 'CHECKED_OUT') return;
     const req = createNewRequest(roomNumber, 'Emergency Assistance', urgentNotes, true);
     setIsEmergencyModalOpen(false);
     setActiveConfirmation(req);
 
     if (soundEnabled) {
       playUrgentAlert();
-    }
-  };
-
-  // Icon selector
-  const getCategoryIcon = (cat: CategoryInfo) => {
-    switch (cat.id) {
-      case 'Contact Front Desk':
-        return <Bell className="w-5 h-5 text-[#C5A880]" />;
-      case 'Housekeeping':
-        return <Sparkles className="w-5 h-5 text-[#C5A880]" />;
-      case 'Extra Pillow / Blanket':
-        return <BedDouble className="w-5 h-5 text-[#C5A880]" />;
-      case 'Toiletries':
-        return <Package className="w-5 h-5 text-[#C5A880]" />;
-      case 'Maintenance':
-        return <Wrench className="w-5 h-5 text-[#C5A880]" />;
-      case 'Water':
-        return <Droplets className="w-5 h-5 text-[#C5A880]" />;
-      case 'Emergency Assistance':
-        return <AlertTriangle className="w-6 h-6 text-[#E63946]" />;
-      default:
-        return <MessageSquare className="w-5 h-5 text-[#C5A880]" />;
     }
   };
 
@@ -137,11 +205,131 @@ export const GuestView: React.FC<GuestViewProps> = ({
     );
   }
 
+  // State 1: If room is currently checked out, display the checkout protective screen
+  if (roomStay.status === 'CHECKED_OUT') {
+    return (
+      <div className="max-w-md mx-auto px-4 py-12 text-center space-y-6 animate-fade-in">
+        <div className="w-16 h-16 rounded-2xl bg-[#261517] border border-[#E63946]/50 flex items-center justify-center mx-auto text-[#E63946] shadow-xl">
+          <DoorClosed className="w-8 h-8" />
+        </div>
+
+        <div className="space-y-2">
+          <div className="inline-flex items-center gap-2 bg-[#1E1C19] border border-[#33302A] rounded-full px-4 py-1 text-xs">
+            <span className="text-[#9E978C] uppercase font-semibold">Room</span>
+            <span className="font-bold text-[#F3EFEA] font-mono">{roomNumber}</span>
+            <span className="text-[#FCA5A5] font-bold uppercase">• Checked Out</span>
+          </div>
+
+          <h2 className="text-2xl font-bold font-serif-luxury text-[#F3EFEA]">
+            Room Currently Checked Out
+          </h2>
+
+          <p className="text-xs sm:text-sm text-[#A89F91] leading-relaxed max-w-sm mx-auto">
+            Thank you for staying at <strong>Madigun Hotel &amp; Events</strong>. Digital guest services for Room {roomNumber} are currently dormant following guest checkout.
+          </p>
+        </div>
+
+        <div className="bg-[#191815] border border-[#2F2C26] rounded-2xl p-5 text-left space-y-3 text-xs">
+          <div className="flex items-center gap-2 text-[#C5A880] font-bold uppercase tracking-wider text-[11px]">
+            <PhoneCall className="w-4 h-4" />
+            <span>Need Assistance?</span>
+          </div>
+          <p className="text-[#D8D2C7] leading-relaxed">
+            If you have just arrived and checked into Room {roomNumber}, please inform the Front Desk receptionist so they can activate your room's digital concierge.
+          </p>
+          <div className="pt-2 border-t border-[#292621] text-[#8E877C] flex justify-between items-center text-[11px]">
+            <span>Front Desk Dial: <strong>Ext. 0</strong> or <strong>Ext. 100</strong></span>
+            <button
+              type="button"
+              onClick={refreshRoomData}
+              className="text-[#C5A880] hover:underline flex items-center gap-1 font-semibold cursor-pointer"
+            >
+              <RefreshCw className="w-3 h-3" />
+              <span>Check Status</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // State 2: Room is OCCUPIED, but requires Passcode Verification
+  if (!isAuthenticated && roomStay.accessCode) {
+    return (
+      <div className="max-w-md mx-auto px-4 py-10 space-y-6 animate-fade-in">
+        {/* Verification Card */}
+        <div className="bg-[#171614] border border-[#2C2A26] rounded-2xl p-6 sm:p-7 shadow-2xl text-center space-y-5">
+          <div className="w-14 h-14 rounded-2xl bg-[#C5A880]/15 border border-[#C5A880]/30 flex items-center justify-center mx-auto text-[#C5A880] shadow-md">
+            <KeyRound className="w-7 h-7" />
+          </div>
+
+          <div className="space-y-1.5">
+            <div className="inline-flex items-center gap-2 bg-[#121110] border border-[#2A2823] rounded-full px-3.5 py-1 text-xs">
+              <span className="text-[#8E877C] uppercase font-semibold">In-Room Concierge</span>
+              <span className="font-bold text-[#C5A880] font-mono">Room {roomNumber}</span>
+            </div>
+
+            <h2 className="text-2xl font-bold font-serif-luxury text-[#F3EFEA]">
+              Guest Access Verification
+            </h2>
+
+            <p className="text-xs text-[#A89F91] leading-relaxed max-w-xs mx-auto">
+              Please enter the <strong>Guest Access Code</strong> printed on your keycard slip, or scan the QR code located in your room.
+            </p>
+          </div>
+
+          {passcodeError && (
+            <div className="bg-[#E63946]/15 border border-[#E63946]/30 text-[#FF8B94] rounded-xl p-3 text-xs flex items-center gap-2 text-left">
+              <ShieldAlert className="w-4 h-4 shrink-0" />
+              <span>{passcodeError}</span>
+            </div>
+          )}
+
+          <form onSubmit={handleVerifyPasscode} className="space-y-4 text-left">
+            <div>
+              <label className="text-[11px] font-semibold text-[#A89F91] uppercase tracking-wider block mb-1.5">
+                Room {roomNumber} Access Code
+              </label>
+              <div className="relative">
+                <Lock className="w-4 h-4 text-[#7E786E] absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  required
+                  value={enteredPasscode}
+                  onChange={(e) => setEnteredPasscode(e.target.value.toUpperCase())}
+                  placeholder="e.g. MDG-1014"
+                  className="w-full bg-[#121110] border border-[#2B2822] focus:border-[#C5A880] rounded-xl pl-10 pr-4 py-2.5 text-sm font-mono tracking-widest text-[#F3EFEA] placeholder-[#7E786E] outline-none transition-all uppercase"
+                />
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              className="w-full py-3 px-4 rounded-xl bg-[#C5A880] hover:bg-[#B39366] text-[#121110] font-bold text-xs uppercase tracking-wider transition-all shadow-md flex items-center justify-center gap-2"
+            >
+              <span>Unlock Concierge Services</span>
+              <ArrowRight className="w-4 h-4" />
+            </button>
+          </form>
+
+          <div className="pt-4 border-t border-[#24211D] text-center space-y-1">
+            <span className="text-[11px] text-[#7E786E] block">
+              Lost your keycard slip or need code assistance?
+            </span>
+            <span className="text-xs text-[#C5A880] font-semibold block">
+              Contact Front Desk: Ext. 0 or Ext. 100
+            </span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // State 3: Authenticated Occupied Guest View
   return (
     <div className="max-w-2xl mx-auto px-4 py-6 sm:py-8 space-y-5">
       {/* Top Banner / Room Header */}
       <div className="text-center space-y-2">
-        {/* Fixed Room Identification Pill (Locked to QR Code) */}
         <div className="inline-flex items-center gap-2 bg-[#1E1C19] border border-[#33302A] rounded-full px-4 py-1.5 shadow-sm">
           <DoorClosed className="w-3.5 h-3.5 text-[#C5A880]" />
           <span className="text-xs text-[#9E978C] uppercase tracking-wider font-semibold">
@@ -150,11 +338,17 @@ export const GuestView: React.FC<GuestViewProps> = ({
           <span className="text-xs font-bold text-[#C5A880] font-mono tracking-wide">
             {roomNumber}
           </span>
+          <span className="text-[10px] text-[#22C55E] font-semibold bg-[#22C55E]/15 px-2 py-0.5 rounded-full border border-[#22C55E]/30">
+            Active Stay
+          </span>
         </div>
 
         <h1 className="text-2xl sm:text-3xl font-bold font-serif-luxury tracking-wide text-[#F3EFEA] pt-1">
           MADIGUN HOTEL &amp; EVENTS
         </h1>
+        <p className="text-xs text-[#A89F91]">
+          Digital In-Room Concierge &amp; Hospitality Services
+        </p>
       </div>
 
       {/* Service Schedule Timer Banner (10 PM to 6 AM Off Duty) */}
@@ -222,6 +416,9 @@ export const GuestView: React.FC<GuestViewProps> = ({
                     Emergency Assistance
                   </h3>
                 </div>
+                <span className="text-xs text-[#FCA5A5] block">
+                  Immediate dispatch for medical or safety concerns
+                </span>
               </div>
             </div>
             <ChevronRight className="w-5 h-5 text-[#E63946] shrink-0 group-hover:translate-x-0.5 transition-transform" />
@@ -229,7 +426,7 @@ export const GuestView: React.FC<GuestViewProps> = ({
         );
       })()}
 
-      {/* Primary Guest Service Category Grid (Clean Titles & Labels Only) */}
+      {/* Primary Guest Service Category Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3">
         {CATEGORIES_CONFIG.filter((c) => !c.isEmergency).map((cat) => (
           <button
@@ -239,70 +436,88 @@ export const GuestView: React.FC<GuestViewProps> = ({
             className="w-full text-left bg-[#1B1917] hover:bg-[#24211D] border border-[#2F2C26] hover:border-[#C5A880]/60 p-3.5 rounded-xl transition-all shadow-sm flex items-center justify-between gap-3 group focus-visible:ring-2 focus-visible:ring-[#C5A880] focus-visible:outline-none cursor-pointer"
           >
             <div className="flex items-center gap-3 min-w-0">
-              <div className="w-10 h-10 rounded-lg bg-[#141311] border border-[#2E2B25] flex items-center justify-center shrink-0 group-hover:scale-105 group-hover:border-[#C5A880]/40 transition-transform">
-                {getCategoryIcon(cat)}
+              <span className="text-2xl shrink-0 p-1.5 rounded-lg bg-[#121110] border border-[#292621]">
+                {cat.emoji}
+              </span>
+              <div className="min-w-0">
+                <h3 className="text-xs sm:text-sm font-bold text-[#F3EFEA] tracking-wide group-hover:text-[#C5A880] transition-colors truncate">
+                  {cat.label}
+                </h3>
+                <span className="text-[11px] text-[#8E877C] line-clamp-1 block">
+                  {cat.description}
+                </span>
               </div>
-              <h3 className="text-sm font-semibold text-[#F3EFEA] group-hover:text-[#C5A880] transition-colors truncate">
-                {cat.label}
-              </h3>
             </div>
-            <ChevronRight className="w-4 h-4 text-[#5A554D] group-hover:text-[#C5A880] shrink-0 group-hover:translate-x-0.5 transition-transform" />
+            <ChevronRight className="w-4 h-4 text-[#8E877C] group-hover:text-[#C5A880] group-hover:translate-x-0.5 transition-all shrink-0" />
           </button>
         ))}
       </div>
 
-      {/* Active Room Requests Tray */}
+      {/* Active In-Room Request Tracker */}
       {roomRequests.length > 0 && (
-        <div className="pt-4 border-t border-[#262421]">
-          <div className="flex items-center justify-between mb-2.5">
-            <h4 className="text-xs uppercase tracking-wider font-semibold text-[#B8B2A7] flex items-center gap-1.5">
-              <Clock className="w-3.5 h-3.5 text-[#C5A880]" />
-              <span>Recent Requests</span>
-            </h4>
+        <div className="mt-6 pt-5 border-t border-[#262421] space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold uppercase tracking-wider text-[#C5A880] flex items-center gap-1.5">
+              <Clock className="w-3.5 h-3.5" />
+              <span>Active Requests for Room {roomNumber}</span>
+            </span>
             <button
               type="button"
               onClick={refreshRoomData}
-              className="text-xs text-[#9E978C] hover:text-[#F3EFEA] flex items-center gap-1 cursor-pointer"
-              title="Refresh status"
+              className="text-[#8E877C] hover:text-[#F3EFEA] text-[11px] flex items-center gap-1 transition-colors"
             >
               <RefreshCw className="w-3 h-3" />
               <span>Refresh</span>
             </button>
           </div>
 
-          <div className="space-y-1.5">
-            {roomRequests.slice(0, 3).map((req) => (
+          <div className="space-y-2">
+            {roomRequests.map((req) => (
               <div
                 key={req.id}
                 onClick={() => setActiveConfirmation(req)}
-                className="bg-[#171614] border border-[#2C2A26] hover:border-[#C5A880]/50 p-2.5 rounded-lg flex items-center justify-between gap-3 text-xs transition-colors cursor-pointer"
+                className="bg-[#171614] border border-[#2A2823] hover:border-[#3E3A33] p-3 rounded-xl flex items-center justify-between gap-3 text-xs transition-all cursor-pointer"
               >
-                <div className="flex items-center gap-2 min-w-0">
-                  <span className="text-sm shrink-0">
-                    {req.isEmergency ? '🚨' : '🛎️'}
-                  </span>
-                  <span className="font-semibold text-[#F3EFEA] truncate">
-                    {req.category}
-                  </span>
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div
+                    className={`w-2 h-2 rounded-full shrink-0 ${
+                      req.status === 'NEW'
+                        ? 'bg-[#E63946] animate-pulse'
+                        : req.status === 'IN_PROGRESS'
+                        ? 'bg-[#C5A880]'
+                        : 'bg-[#22C55E]'
+                    }`}
+                  />
+                  <div className="min-w-0">
+                    <span className="font-bold text-[#F3EFEA] block truncate">
+                      {req.category}
+                    </span>
+                    <span className="text-[#8E877C] text-[10px]">
+                      {new Date(req.createdAt).toLocaleTimeString([], {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })}
+                    </span>
+                  </div>
                 </div>
 
-                <div className="shrink-0 flex items-center gap-2">
-                  {req.status === 'NEW' && (
-                    <span className="px-2 py-0.5 rounded-full bg-[#3B82F6]/20 text-[#93C5FD] font-semibold text-[10px]">
-                      Queued
-                    </span>
-                  )}
-                  {req.status === 'IN_PROGRESS' && (
-                    <span className="px-2 py-0.5 rounded-full bg-[#EAB308]/20 text-[#FDE047] font-semibold text-[10px]">
-                      In Progress
-                    </span>
-                  )}
-                  {req.status === 'COMPLETED' && (
-                    <span className="px-2 py-0.5 rounded-full bg-[#22C55E]/20 text-[#86EFAC] font-semibold text-[10px] flex items-center gap-1">
-                      <CheckCircle2 className="w-2.5 h-2.5" />
-                      Completed
-                    </span>
-                  )}
+                <div className="flex items-center gap-2 shrink-0">
+                  <span
+                    className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                      req.status === 'NEW'
+                        ? 'bg-[#E63946]/15 text-[#FF8B94]'
+                        : req.status === 'IN_PROGRESS'
+                        ? 'bg-[#C5A880]/15 text-[#E5D5B8]'
+                        : 'bg-[#22C55E]/15 text-[#86EFAC]'
+                    }`}
+                  >
+                    {req.status === 'NEW'
+                      ? 'Queued'
+                      : req.status === 'IN_PROGRESS'
+                      ? 'En Route'
+                      : 'Completed'}
+                  </span>
+                  <ChevronRight className="w-3.5 h-3.5 text-[#8E877C]" />
                 </div>
               </div>
             ))}
@@ -310,25 +525,27 @@ export const GuestView: React.FC<GuestViewProps> = ({
         </div>
       )}
 
-      {/* Modals */}
-      <RequestModal
-        roomNumber={roomNumber}
-        category={selectedCategory}
-        isOpen={isRequestModalOpen}
-        onClose={() => {
-          setIsRequestModalOpen(false);
-          setSelectedCategory(null);
-        }}
-        onSubmit={handleStandardSubmit}
-      />
+      {/* Service Request Modal */}
+      {selectedCategory && (
+        <RequestModal
+          isOpen={isRequestModalOpen}
+          onClose={() => {
+            setIsRequestModalOpen(false);
+            setSelectedCategory(null);
+          }}
+          category={selectedCategory}
+          roomNumber={roomNumber}
+          onSubmit={handleStandardSubmit}
+        />
+      )}
 
+      {/* Emergency Request Modal */}
       <EmergencyModal
-        roomNumber={roomNumber}
         isOpen={isEmergencyModalOpen}
         onClose={() => setIsEmergencyModalOpen(false)}
-        onConfirm={handleEmergencySubmit}
+        roomNumber={roomNumber}
+        onSubmit={handleEmergencySubmit}
       />
     </div>
   );
 };
-

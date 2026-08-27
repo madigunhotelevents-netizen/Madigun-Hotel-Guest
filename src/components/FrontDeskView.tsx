@@ -1,15 +1,6 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Bell,
-  CheckCircle2,
-  Clock,
-  AlertTriangle,
-  Play,
-  RotateCcw,
-  Search,
-  Plus,
-  Volume2,
-  VolumeX,
   Sparkles,
   BedDouble,
   Package,
@@ -17,30 +8,56 @@ import {
   UtensilsCrossed,
   Droplets,
   Shirt,
+  AlertTriangle,
   MessageSquare,
+  CheckCircle2,
+  Clock,
+  Play,
+  RotateCcw,
+  Volume2,
+  VolumeX,
+  Search,
+  Users,
+  ExternalLink,
+  ChevronRight,
   ShieldAlert,
+  SlidersHorizontal,
+  Plus,
   Trash2,
-  Moon,
-  Sun,
+  Lock,
+  UserCheck,
+  User,
+  Building,
+  DoorClosed,
+  Check,
+  Ban,
+  Radio,
+  Hourglass,
+  ArrowDownUp,
 } from 'lucide-react';
-import { HotelRequest, RequestStatus, UserProfile } from '../types/hotel';
+import { HotelRequest, UserProfile, RoomStay } from '../types/hotel';
 import {
   getStoredRequests,
-  fetchRequestsFromServer,
   updateRequestStatus,
   deleteRequest,
   resetToDemoRequests,
   subscribeToRequestEvents,
   createNewRequest,
+  fetchRequestsFromServer,
+  getRoomStay,
+  getAllRoomStays,
+  setRoomStayStatus,
 } from '../services/storageService';
 import { playConciergeBell, playUrgentAlert, playSuccessChime } from '../services/soundService';
-import { useServiceSchedule } from '../services/scheduleService';
+import { AssignPersonnelModal } from './AssignPersonnelModal';
+import { CreateAccountModal } from './CreateAccountModal';
+import { CreateStaffMemberModal } from './CreateStaffMemberModal';
 
 interface FrontDeskViewProps {
   soundEnabled: boolean;
   setSoundEnabled: (enabled: boolean) => void;
-  onNavigateToGuest?: (room: string) => void;
-  currentUser?: UserProfile | null;
+  onNavigateToGuest?: (roomNumber: string) => void;
+  currentUser: UserProfile | null;
   onOpenLoginModal?: () => void;
 }
 
@@ -52,34 +69,41 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
   onOpenLoginModal,
 }) => {
   const [requests, setRequests] = useState<HotelRequest[]>([]);
-  const [statusFilter, setStatusFilter] = useState<'ACTIVE' | 'NEW' | 'IN_PROGRESS' | 'COMPLETED' | 'ALL'>('ACTIVE');
+  const [roomStays, setRoomStays] = useState<RoomStay[]>([]);
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'NEW' | 'IN_PROGRESS' | 'COMPLETED' | 'ACTIVE'>('ACTIVE');
   const [searchQuery, setSearchQuery] = useState('');
-  const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>('default');
   const [quickTestModalOpen, setQuickTestModalOpen] = useState(false);
-  const [testRoom, setTestRoom] = useState('102');
-  const [testCategory, setTestCategory] = useState<HotelRequest['category']>('Housekeeping');
-  const [testMessage, setTestMessage] = useState('Fresh towels please');
-  const schedule = useServiceSchedule();
+  const [showRoomCheckoutManager, setShowRoomCheckoutManager] = useState(false);
 
-  // Load and subscribe to real-time events
+  // Personnel Assignment Modal state
+  const [assigningRequest, setAssigningRequest] = useState<HotelRequest | null>(null);
+  const [isCreateAccountModalOpen, setIsCreateAccountModalOpen] = useState(false);
+  const [isCreateStaffModalOpen, setIsCreateStaffModalOpen] = useState(false);
+
+  // Test request modal form state
+  const [testRoom, setTestRoom] = useState('101');
+  const [testCategory, setTestCategory] = useState<HotelRequest['category']>('Housekeeping');
+  const [testMessage, setTestMessage] = useState('');
+
+  const isDeveloper = currentUser?.role === 'developer' || currentUser?.isPrimaryDeveloper;
+
   const loadRequests = () => {
-    setRequests([...getStoredRequests()]);
-    fetchRequestsFromServer().then((data) => {
-      if (Array.isArray(data)) {
-        setRequests([...data]);
-      }
-    }).catch(() => {});
+    setRequests(getStoredRequests());
+    setRoomStays(getAllRoomStays());
   };
 
   useEffect(() => {
     loadRequests();
 
-    if (typeof window !== 'undefined' && 'Notification' in window) {
-      setNotificationPermission(Notification.permission);
-    }
+    // Initial server fetch to hydrate Firestore data
+    fetchRequestsFromServer().then((data) => {
+      if (Array.isArray(data) && data.length > 0) {
+        setRequests(data);
+      }
+    });
 
     const unsubscribe = subscribeToRequestEvents((event) => {
-      setRequests([...getStoredRequests()]);
+      loadRequests();
       if (event.type === 'NEW_REQUEST_SUBMITTED' && event.request) {
         if (soundEnabled) {
           if (event.request.isEmergency) {
@@ -88,75 +112,47 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
             playConciergeBell();
           }
         }
-
-        // Show native browser notification if granted
-        if (
-          typeof window !== 'undefined' &&
-          'Notification' in window &&
-          Notification.permission === 'granted'
-        ) {
-          new Notification(
-            event.request.isEmergency
-              ? `🚨 URGENT: Emergency Room ${event.request.roomNumber}`
-              : `🛎️ New Request: Room ${event.request.roomNumber}`,
-            {
-              body: `${event.request.category}${
-                event.request.additionalMessage ? `: "${event.request.additionalMessage}"` : ''
-              }`,
-              icon: '/favicon.ico',
-            }
-          );
-        }
       }
     });
 
-    // Auto-poll every 2 seconds as a safety heartbeat
-    const interval = setInterval(loadRequests, 2000);
-
-    return () => {
-      unsubscribe();
-      clearInterval(interval);
-    };
+    return unsubscribe;
   }, [soundEnabled]);
 
-  const requestNotificationPermission = async () => {
-    if (typeof window !== 'undefined' && 'Notification' in window) {
-      try {
-        const perm = await Notification.requestPermission();
-        setNotificationPermission(perm);
-      } catch (err) {
-        console.error('Failed to request notification permission', err);
-      }
-    }
+  // Request Action Handlers
+  const handleOpenAcceptModal = (req: HotelRequest) => {
+    setAssigningRequest(req);
   };
 
-  // Status handlers
-  const handleAccept = (requestId: string) => {
-    const staffName = currentUser?.name || 'Front Desk Staff';
-    const updated = updateRequestStatus(requestId, 'IN_PROGRESS', staffName);
+  const handleConfirmAssignment = (personnel: {
+    staffId?: string;
+    name: string;
+    roleTitle?: string;
+    department?: string;
+    notes?: string;
+  }) => {
+    if (!assigningRequest) return;
+    const updated = updateRequestStatus(assigningRequest.id, 'IN_PROGRESS', personnel);
     setRequests(updated);
+    setAssigningRequest(null);
+  };
+
+  const handleComplete = (id: string, staffName?: string) => {
+    const defaultStaff = staffName || currentUser?.name || 'Front Desk Staff';
+    const res = updateRequestStatus(id, 'COMPLETED', defaultStaff);
+    setRequests(res);
     if (soundEnabled) {
       playSuccessChime();
     }
   };
 
-  const handleComplete = (requestId: string) => {
-    const staffName = currentUser?.name || 'Front Desk Staff';
-    const updated = updateRequestStatus(requestId, 'COMPLETED', staffName);
-    setRequests(updated);
-    if (soundEnabled) {
-      playSuccessChime();
-    }
+  const handleReopen = (id: string) => {
+    const res = updateRequestStatus(id, 'NEW');
+    setRequests(res);
   };
 
-  const handleReopen = (requestId: string) => {
-    const updated = updateRequestStatus(requestId, 'NEW');
-    setRequests(updated);
-  };
-
-  const handleDelete = (requestId: string) => {
-    const updated = deleteRequest(requestId);
-    setRequests(updated);
+  const handleDelete = (id: string) => {
+    const res = deleteRequest(id);
+    setRequests(res);
   };
 
   const handleResetDemo = () => {
@@ -175,9 +171,18 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
     }
   };
 
-  // Filtered requests
+  // Toggle Room Occupancy / Checkout status
+  const handleToggleRoomCheckout = (roomNum: string, currentStatus: 'OCCUPIED' | 'CHECKED_OUT') => {
+    const nextStatus = currentStatus === 'OCCUPIED' ? 'CHECKED_OUT' : 'OCCUPIED';
+    setRoomStayStatus(roomNum, nextStatus);
+    setRoomStays(getAllRoomStays());
+  };
+
+  // FIRST-COME-FIRST-SERVED (FIFO) SORTING:
+  // Active / New / In-Progress requests are sorted by createdAt ASCENDING (Oldest first)
+  // Emergencies are prioritized at the top of active queue, followed by oldest to newest requests.
   const filteredRequests = useMemo(() => {
-    return requests.filter((req) => {
+    const list = requests.filter((req) => {
       // Status filter
       if (statusFilter === 'ACTIVE' && req.status === 'COMPLETED') return false;
       if (statusFilter === 'NEW' && req.status !== 'NEW') return false;
@@ -190,10 +195,40 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
         const matchesRoom = req.roomNumber.toLowerCase().includes(q);
         const matchesCategory = req.category.toLowerCase().includes(q);
         const matchesMsg = req.additionalMessage.toLowerCase().includes(q);
-        return matchesRoom || matchesCategory || matchesMsg;
+        const matchesStaff = (req.assignedStaffName || req.acceptedByStaffName || '').toLowerCase().includes(q);
+        return matchesRoom || matchesCategory || matchesMsg || matchesStaff;
       }
 
       return true;
+    });
+
+    // FIFO Sorting Rule:
+    // If viewing completed items only: Sort by completedAt descending (most recently completed first)
+    if (statusFilter === 'COMPLETED') {
+      return list.sort((a, b) => (b.completedAt || b.createdAt) - (a.completedAt || a.createdAt));
+    }
+
+    // For Active / New / In-Progress / All:
+    // 1. Uncompleted emergencies first (FIFO among emergencies)
+    // 2. Active New & In-Progress requests sorted by OLDEST FIRST (a.createdAt - b.createdAt)
+    // 3. Completed items at the bottom
+    return list.sort((a, b) => {
+      const aIsActive = a.status !== 'COMPLETED';
+      const bIsActive = b.status !== 'COMPLETED';
+
+      if (aIsActive && !bIsActive) return -1;
+      if (!aIsActive && bIsActive) return 1;
+
+      // Both active
+      if (aIsActive && bIsActive) {
+        if (a.isEmergency && !b.isEmergency) return -1;
+        if (!a.isEmergency && b.isEmergency) return 1;
+        // Oldest request first (First-Come, First-Served)
+        return a.createdAt - b.createdAt;
+      }
+
+      // Both completed
+      return (b.completedAt || b.createdAt) - (a.completedAt || a.createdAt);
     });
   }, [requests, statusFilter, searchQuery]);
 
@@ -216,25 +251,25 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
   const getCategoryIcon = (category: string) => {
     switch (category) {
       case 'Contact Front Desk':
-        return <Bell className="w-5 h-5 text-[#C5A880]" />;
+        return <Bell className="w-4 h-4 text-[#C5A880]" />;
       case 'Housekeeping':
-        return <Sparkles className="w-5 h-5 text-[#C5A880]" />;
+        return <Sparkles className="w-4 h-4 text-[#C5A880]" />;
       case 'Extra Pillow / Blanket':
-        return <BedDouble className="w-5 h-5 text-[#C5A880]" />;
+        return <BedDouble className="w-4 h-4 text-[#C5A880]" />;
       case 'Toiletries':
-        return <Package className="w-5 h-5 text-[#C5A880]" />;
+        return <Package className="w-4 h-4 text-[#C5A880]" />;
       case 'Maintenance':
-        return <Wrench className="w-5 h-5 text-[#C5A880]" />;
+        return <Wrench className="w-4 h-4 text-[#C5A880]" />;
       case 'Room Service':
-        return <UtensilsCrossed className="w-5 h-5 text-[#C5A880]" />;
+        return <UtensilsCrossed className="w-4 h-4 text-[#C5A880]" />;
       case 'Water':
-        return <Droplets className="w-5 h-5 text-[#C5A880]" />;
+        return <Droplets className="w-4 h-4 text-[#C5A880]" />;
       case 'Laundry':
-        return <Shirt className="w-5 h-5 text-[#C5A880]" />;
+        return <Shirt className="w-4 h-4 text-[#C5A880]" />;
       case 'Emergency Assistance':
-        return <AlertTriangle className="w-5 h-5 text-[#E63946]" />;
+        return <AlertTriangle className="w-4 h-4 text-[#E63946]" />;
       default:
-        return <MessageSquare className="w-5 h-5 text-[#C5A880]" />;
+        return <MessageSquare className="w-4 h-4 text-[#C5A880]" />;
     }
   };
 
@@ -248,260 +283,351 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
     return `${hours}h ago`;
   };
 
+  // Rooms list for checkout manager
+  const ALL_ROOMS = ['101', '102', '103', '104', '105', '201', '202', '203', '204', '205', '301', '302', '305', '308'];
+
   return (
     <div className="max-w-6xl mx-auto px-4 py-6 sm:py-8 space-y-6">
-      {/* Top Banner / Status Overview */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[#2C2A26] pb-5">
+      {/* Top Header & Overview */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-[#2C2A26] pb-5">
         <div>
-          <div className="flex items-center gap-2.5">
-            <span className="w-2.5 h-2.5 rounded-full bg-[#22C55E] animate-pulse" />
-            <span className="text-xs uppercase tracking-widest text-[#C5A880] font-semibold">
-              Live Console
+          <div className="flex items-center gap-2">
+            <span className="text-xs uppercase tracking-widest text-[#C5A880] font-semibold flex items-center gap-1.5">
+              <Radio className="w-3.5 h-3.5 text-[#22C55E] animate-pulse" />
+              <span>Real-Time Request Dispatch</span>
             </span>
           </div>
-          <h1 className="text-2xl sm:text-3xl font-bold font-serif-luxury text-[#F3EFEA]">
-            Front Desk
+          <h1 className="text-2xl sm:text-3xl font-bold font-serif-luxury text-[#F3EFEA] flex items-center gap-3">
+            <span>Front Desk Dispatch Queue</span>
+            <span className="text-xs font-sans font-normal px-2.5 py-1 rounded-full bg-[#262420] text-[#C5A880] border border-[#3E3A33]">
+              First-Come, First-Served (FIFO)
+            </span>
           </h1>
+          <p className="text-xs sm:text-sm text-[#A89F91] mt-1">
+            Requests are ordered chronologically from oldest to newest. Accept requests to assign dedicated staff personnel.
+          </p>
         </div>
 
-        {/* Quick Toolbar */}
+        {/* Action Controls */}
         <div className="flex flex-wrap items-center gap-2">
-          {notificationPermission !== 'granted' && typeof window !== 'undefined' && 'Notification' in window && (
-            <button
-              type="button"
-              onClick={requestNotificationPermission}
-              className="text-xs px-3 py-1.5 rounded-md bg-[#252320] hover:bg-[#322E29] border border-[#3D3830] text-[#D8D2C7] transition-colors flex items-center gap-1.5 focus-visible:ring-1 focus-visible:ring-[#C5A880] cursor-pointer"
-            >
-              <Bell className="w-3.5 h-3.5 text-[#C5A880]" />
-              <span>Browser Alerts</span>
-            </button>
-          )}
-
+          {/* Room Checkout & Occupancy Manager Button */}
           <button
             type="button"
-            onClick={() => {
-              if (soundEnabled) {
-                playConciergeBell();
-              } else {
-                setSoundEnabled(true);
-                playConciergeBell();
-              }
-            }}
-            className="text-xs px-3 py-1.5 rounded-md bg-[#252320] hover:bg-[#322E29] border border-[#3D3830] text-[#D8D2C7] transition-colors flex items-center gap-1.5 cursor-pointer"
-            title="Test concierge chime"
+            onClick={() => setShowRoomCheckoutManager(!showRoomCheckoutManager)}
+            className={`px-3 py-2 rounded-lg text-xs font-semibold border transition-all flex items-center gap-1.5 ${
+              showRoomCheckoutManager
+                ? 'bg-[#C5A880] text-[#121110] border-[#C5A880]'
+                : 'bg-[#1C1B18] text-[#D8D2C7] border-[#38342E] hover:border-[#C5A880]'
+            }`}
           >
-            {soundEnabled ? <Volume2 className="w-3.5 h-3.5 text-[#C5A880]" /> : <VolumeX className="w-3.5 h-3.5 text-[#7E786E]" />}
-            <span>Test Chime</span>
+            <DoorClosed className="w-3.5 h-3.5" />
+            <span>Room Checkout Control</span>
           </button>
 
+          {/* Simulate In-Room Request */}
           <button
             type="button"
             onClick={() => setQuickTestModalOpen(true)}
-            className="text-xs px-3 py-1.5 rounded-md bg-[#C5A880] hover:bg-[#B39366] text-[#121110] font-bold transition-all flex items-center gap-1.5 shadow-sm cursor-pointer"
+            className="px-3 py-2 rounded-lg bg-[#2A2824] hover:bg-[#35322E] text-[#D8D2C7] text-xs font-medium border border-[#3E3A33] transition-colors flex items-center gap-1.5 cursor-pointer"
           >
-            <Plus className="w-3.5 h-3.5" />
-            <span>Simulate Request</span>
+            <Plus className="w-3.5 h-3.5 text-[#C5A880]" />
+            <span>Test Request</span>
           </button>
 
+          {/* Sound Toggle */}
+          <button
+            type="button"
+            onClick={() => setSoundEnabled(!soundEnabled)}
+            className={`p-2 rounded-lg border transition-colors cursor-pointer ${
+              soundEnabled
+                ? 'bg-[#1C1B18] border-[#38342E] text-[#C5A880]'
+                : 'bg-[#1C1B18] border-[#38342E] text-[#6E685E]'
+            }`}
+            title={soundEnabled ? 'Mute Alert Bells' : 'Enable Alert Bells'}
+          >
+            {soundEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
+          </button>
+
+          {/* Reset Demo Requests */}
           <button
             type="button"
             onClick={handleResetDemo}
-            className="text-xs px-3 py-1.5 rounded-md bg-[#1C1B18] hover:bg-[#252320] border border-[#33302A] text-[#9E978C] hover:text-[#F3EFEA] transition-colors flex items-center gap-1 cursor-pointer"
-            title="Reset to sample initial requests"
+            className="p-2 rounded-lg bg-[#1C1B18] border border-[#38342E] text-[#8E877C] hover:text-[#F3EFEA] hover:bg-[#252320] transition-colors cursor-pointer"
+            title="Reset to default demo requests"
           >
-            <RotateCcw className="w-3 h-3" />
-            <span>Reset Demo</span>
+            <RotateCcw className="w-4 h-4" />
           </button>
         </div>
       </div>
 
-      {/* Housekeeping & Concierge Duty Hours Strip */}
-      <div className={`border rounded-xl p-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs ${
-        schedule.isOffDuty 
-          ? 'bg-[#241A14] border-[#EAB308]/40 text-[#F3EFEA]' 
-          : 'bg-[#171614] border-[#2A2823] text-[#D8D2C7]'
-      }`}>
-        <div className="flex items-center gap-2.5">
-          {schedule.isOffDuty ? (
-            <div className="w-6 h-6 rounded bg-[#EAB308]/20 border border-[#EAB308]/40 flex items-center justify-center text-[#FDE047]">
-              <Moon className="w-3.5 h-3.5" />
+      {/* Room Checkout & Occupancy Control Drawer (Method for preventing checked-out guest access) */}
+      {showRoomCheckoutManager && (
+        <div className="bg-[#1A1916] border border-[#C5A880]/40 rounded-2xl p-4 sm:p-5 space-y-4 animate-fade-in shadow-xl">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[#2D2A24] pb-3">
+            <div>
+              <div className="flex items-center gap-2">
+                <DoorClosed className="w-4 h-4 text-[#C5A880]" />
+                <h3 className="text-sm sm:text-base font-bold text-[#F3EFEA] font-serif-luxury">
+                  Room Stay Status &amp; Digital Checkout Access Control
+                </h3>
+              </div>
+              <p className="text-xs text-[#A89F91] mt-0.5">
+                When a guest checks out, mark their room as <strong>Checked Out</strong>. Any scanned QR code or saved link for that room will immediately show a vacant room notice and prevent guest submissions.
+              </p>
             </div>
-          ) : (
-            <div className="w-6 h-6 rounded bg-[#C5A880]/20 border border-[#C5A880]/40 flex items-center justify-center text-[#C5A880]">
-              <Sun className="w-3.5 h-3.5" />
-            </div>
-          )}
-          <div>
-            <span className="font-bold text-[#F3EFEA] block">
-              {schedule.isOffDuty ? 'Housekeeping & Concierge: Off Duty (10:00 PM – 6:00 AM)' : 'Housekeeping & Concierge: On Duty (6:00 AM – 10:00 PM)'}
-            </span>
-            <span className="text-[11px] text-[#A89F91]">
-              {schedule.isOffDuty ? 'Services resume at 6:00 AM' : 'Overnight off-duty begins at 10:00 PM'}
-            </span>
+            <button
+              type="button"
+              onClick={() => setShowRoomCheckoutManager(false)}
+              className="text-xs text-[#8E877C] hover:text-[#F3EFEA] underline self-start sm:self-center"
+            >
+              Hide Panel
+            </button>
+          </div>
+
+          {/* Rooms Grid */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-2.5 pt-1">
+            {ALL_ROOMS.map((rm) => {
+              const stay = getRoomStay(rm);
+              const isOccupied = stay.status === 'OCCUPIED';
+
+              return (
+                <div
+                  key={rm}
+                  className={`p-3 rounded-xl border transition-all text-center space-y-2 ${
+                    isOccupied
+                      ? 'bg-[#141311] border-[#2E2B25]'
+                      : 'bg-[#261517] border-[#E63946]/40'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-mono font-bold text-sm text-[#F3EFEA]">
+                      Rm {rm}
+                    </span>
+                    <span
+                      className={`w-2 h-2 rounded-full ${
+                        isOccupied ? 'bg-[#22C55E]' : 'bg-[#E63946]'
+                      }`}
+                    />
+                  </div>
+
+                  <div className="text-[10px] uppercase font-bold tracking-wider">
+                    {isOccupied ? (
+                      <span className="text-[#86EFAC]">Occupied</span>
+                    ) : (
+                      <span className="text-[#FCA5A5]">Checked Out</span>
+                    )}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => handleToggleRoomCheckout(rm, stay.status)}
+                    className={`w-full py-1 rounded text-[11px] font-bold transition-all ${
+                      isOccupied
+                        ? 'bg-[#252320] hover:bg-[#E63946] text-[#B8B2A7] hover:text-white border border-[#3A362F]'
+                        : 'bg-[#22C55E] hover:bg-[#16A34A] text-[#121110]'
+                    }`}
+                  >
+                    {isOccupied ? 'Check Out' : 'Check In'}
+                  </button>
+                </div>
+              );
+            })}
           </div>
         </div>
+      )}
 
-        <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
-          <span className="text-[10px] uppercase font-semibold text-[#A89F91]">
-            {schedule.isOffDuty ? 'Resumes in:' : 'Shift ends in:'}
-          </span>
-          <span className={`font-mono font-bold text-xs px-2 py-0.5 rounded ${
-            schedule.isOffDuty ? 'bg-[#16120D] text-[#FDE047] border border-[#3A2E1F]' : 'bg-[#141311] text-[#C5A880] border border-[#2E2B25]'
-          }`}>
-            {schedule.formattedCountdown}
-          </span>
-        </div>
+      {/* Metric Cards Row */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+        <button
+          type="button"
+          onClick={() => setStatusFilter('ACTIVE')}
+          className={`p-4 rounded-xl border text-left transition-all ${
+            statusFilter === 'ACTIVE'
+              ? 'bg-[#25221C] border-[#C5A880] shadow-md ring-1 ring-[#C5A880]/50'
+              : 'bg-[#181715] border-[#2E2B25] hover:border-[#423E35]'
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-[#A89F91] font-medium uppercase tracking-wider">Active Queue</span>
+            <Hourglass className="w-4 h-4 text-[#C5A880]" />
+          </div>
+          <div className="text-2xl sm:text-3xl font-bold font-mono text-[#F3EFEA] mt-1">
+            {counts.active}
+          </div>
+          <span className="text-[11px] text-[#A89F91] block mt-0.5">First-Come First-Served</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setStatusFilter('NEW')}
+          className={`p-4 rounded-xl border text-left transition-all ${
+            statusFilter === 'NEW'
+              ? 'bg-[#1D2535] border-[#3B82F6] shadow-md ring-1 ring-[#3B82F6]/50'
+              : 'bg-[#181715] border-[#2E2B25] hover:border-[#423E35]'
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-[#93C5FD] font-medium uppercase tracking-wider">Unassigned New</span>
+            <Bell className="w-4 h-4 text-[#3B82F6]" />
+          </div>
+          <div className="text-2xl sm:text-3xl font-bold font-mono text-[#93C5FD] mt-1">
+            {counts.new}
+          </div>
+          <span className="text-[11px] text-[#8E877C] block mt-0.5">Awaiting Acceptance</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setStatusFilter('IN_PROGRESS')}
+          className={`p-4 rounded-xl border text-left transition-all ${
+            statusFilter === 'IN_PROGRESS'
+              ? 'bg-[#2A2414] border-[#EAB308] shadow-md ring-1 ring-[#EAB308]/50'
+              : 'bg-[#181715] border-[#2E2B25] hover:border-[#423E35]'
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-[#FDE047] font-medium uppercase tracking-wider">In Progress</span>
+            <UserCheck className="w-4 h-4 text-[#EAB308]" />
+          </div>
+          <div className="text-2xl sm:text-3xl font-bold font-mono text-[#FDE047] mt-1">
+            {counts.inProgress}
+          </div>
+          <span className="text-[11px] text-[#8E877C] block mt-0.5">Assigned to Staff</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setStatusFilter('COMPLETED')}
+          className={`p-4 rounded-xl border text-left transition-all ${
+            statusFilter === 'COMPLETED'
+              ? 'bg-[#16271D] border-[#22C55E] shadow-md ring-1 ring-[#22C55E]/50'
+              : 'bg-[#181715] border-[#2E2B25] hover:border-[#423E35]'
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-[#86EFAC] font-medium uppercase tracking-wider">Completed</span>
+            <CheckCircle2 className="w-4 h-4 text-[#22C55E]" />
+          </div>
+          <div className="text-2xl sm:text-3xl font-bold font-mono text-[#86EFAC] mt-1">
+            {counts.completed}
+          </div>
+          <span className="text-[11px] text-[#8E877C] block mt-0.5">Resolved Requests</span>
+        </button>
       </div>
 
-      {/* Emergency Alert Banner (if any active emergency exists) */}
+      {/* Emergency Alert Banner if any emergency is pending */}
       {counts.emergency > 0 && (
-        <div className="bg-[#2A1215] border-2 border-[#E63946] rounded-xl p-4 flex items-center justify-between gap-4 animate-pulse">
+        <div className="bg-[#2B1417] border-2 border-[#E63946] rounded-xl p-4 flex items-center justify-between gap-3 animate-pulse shadow-lg shadow-red-950/30">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-[#E63946]/20 border border-[#E63946] flex items-center justify-center text-[#E63946] shrink-0">
-              <ShieldAlert className="w-6 h-6" />
-            </div>
+            <ShieldAlert className="w-6 h-6 text-[#E63946] shrink-0" />
             <div>
-              <h3 className="text-sm font-bold text-white uppercase tracking-wider">
-                {counts.emergency} Active Emergency Assistance Alert{counts.emergency > 1 ? 's' : ''}
-              </h3>
-              <p className="text-xs text-[#FFCCD5]">
-                Immediate front desk response required. Check high-priority cards below.
+              <h4 className="text-sm font-bold text-white uppercase tracking-wider">
+                🚨 Immediate Action Required: {counts.emergency} Active Emergency Assistance Alert
+              </h4>
+              <p className="text-xs text-[#FCA5A5]">
+                Guests require urgent in-room attention. Prioritized at the top of the queue.
               </p>
             </div>
           </div>
           <button
             type="button"
             onClick={() => setStatusFilter('ACTIVE')}
-            className="px-3 py-1.5 rounded bg-[#E63946] hover:bg-[#D62828] text-white text-xs font-bold whitespace-nowrap"
+            className="px-3 py-1.5 rounded bg-[#E63946] text-white text-xs font-bold shrink-0 hover:bg-[#CC2936] transition-colors"
           >
-            View Urgent
+            View Alert
           </button>
         </div>
       )}
 
-      {/* Filter Tabs & Search Bar */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-        {/* Status Filters */}
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0 scrollbar-none">
+      {/* Filter Tabs and Search Bar */}
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-1">
+        {/* Status Filter Pills */}
+        <div className="flex items-center gap-1 bg-[#181715] p-1 rounded-xl border border-[#2E2B25] overflow-x-auto scrollbar-none">
           <button
             type="button"
             onClick={() => setStatusFilter('ACTIVE')}
-            className={`text-xs px-3 py-2 rounded-lg font-semibold transition-all whitespace-nowrap flex items-center gap-1.5 ${
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors ${
               statusFilter === 'ACTIVE'
-                ? 'bg-[#C5A880] text-[#121110] shadow-sm'
-                : 'bg-[#1C1B18] text-[#B8B2A7] hover:bg-[#252320] border border-[#2E2B25]'
+                ? 'bg-[#C5A880] text-[#121110] font-bold'
+                : 'text-[#8E877C] hover:text-[#F3EFEA]'
             }`}
           >
-            <span>Active Requests</span>
-            <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
-              statusFilter === 'ACTIVE' ? 'bg-[#121110]/20 text-[#121110]' : 'bg-[#2A2824] text-[#D8D2C7]'
-            }`}>
-              {counts.active}
-            </span>
+            Active Queue ({counts.active})
           </button>
-
           <button
             type="button"
             onClick={() => setStatusFilter('NEW')}
-            className={`text-xs px-3 py-2 rounded-lg font-semibold transition-all whitespace-nowrap flex items-center gap-1.5 ${
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors ${
               statusFilter === 'NEW'
-                ? 'bg-[#3B82F6] text-white shadow-sm'
-                : 'bg-[#1C1B18] text-[#B8B2A7] hover:bg-[#252320] border border-[#2E2B25]'
+                ? 'bg-[#C5A880] text-[#121110] font-bold'
+                : 'text-[#8E877C] hover:text-[#F3EFEA]'
             }`}
           >
-            <span>New</span>
-            {counts.new > 0 && (
-              <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
-                statusFilter === 'NEW' ? 'bg-white text-[#3B82F6]' : 'bg-[#3B82F6]/30 text-[#93C5FD]'
-              }`}>
-                {counts.new}
-              </span>
-            )}
+            New ({counts.new})
           </button>
-
           <button
             type="button"
             onClick={() => setStatusFilter('IN_PROGRESS')}
-            className={`text-xs px-3 py-2 rounded-lg font-semibold transition-all whitespace-nowrap flex items-center gap-1.5 ${
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors ${
               statusFilter === 'IN_PROGRESS'
-                ? 'bg-[#EAB308] text-[#121110] shadow-sm'
-                : 'bg-[#1C1B18] text-[#B8B2A7] hover:bg-[#252320] border border-[#2E2B25]'
+                ? 'bg-[#C5A880] text-[#121110] font-bold'
+                : 'text-[#8E877C] hover:text-[#F3EFEA]'
             }`}
           >
-            <span>In Progress</span>
-            {counts.inProgress > 0 && (
-              <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
-                statusFilter === 'IN_PROGRESS' ? 'bg-[#121110]/20 text-[#121110]' : 'bg-[#EAB308]/30 text-[#FDE047]'
-              }`}>
-                {counts.inProgress}
-              </span>
-            )}
+            In Progress ({counts.inProgress})
           </button>
-
           <button
             type="button"
             onClick={() => setStatusFilter('COMPLETED')}
-            className={`text-xs px-3 py-2 rounded-lg font-semibold transition-all whitespace-nowrap flex items-center gap-1.5 ${
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors ${
               statusFilter === 'COMPLETED'
-                ? 'bg-[#22C55E] text-white shadow-sm'
-                : 'bg-[#1C1B18] text-[#B8B2A7] hover:bg-[#252320] border border-[#2E2B25]'
+                ? 'bg-[#C5A880] text-[#121110] font-bold'
+                : 'text-[#8E877C] hover:text-[#F3EFEA]'
             }`}
           >
-            <span>Completed</span>
-            <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
-              statusFilter === 'COMPLETED' ? 'bg-white text-[#22C55E]' : 'bg-[#22C55E]/30 text-[#86EFAC]'
-            }`}>
-              {counts.completed}
-            </span>
+            Completed ({counts.completed})
           </button>
-
           <button
             type="button"
             onClick={() => setStatusFilter('ALL')}
-            className={`text-xs px-3 py-2 rounded-lg font-semibold transition-all whitespace-nowrap flex items-center gap-1.5 ${
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors ${
               statusFilter === 'ALL'
-                ? 'bg-[#E5D5B8] text-[#121110] shadow-sm'
-                : 'bg-[#1C1B18] text-[#B8B2A7] hover:bg-[#252320] border border-[#2E2B25]'
+                ? 'bg-[#C5A880] text-[#121110] font-bold'
+                : 'text-[#8E877C] hover:text-[#F3EFEA]'
             }`}
           >
-            <span>All ({counts.total})</span>
+            All ({counts.total})
           </button>
         </div>
 
-        {/* Search input */}
-        <div className="relative w-full md:w-64">
-          <Search className="w-4 h-4 text-[#7A756D] absolute left-3 top-1/2 -translate-y-1/2" />
+        {/* Search Box */}
+        <div className="relative min-w-[240px]">
+          <Search className="w-3.5 h-3.5 text-[#7E786E] absolute left-3 top-1/2 -translate-y-1/2" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search room, request..."
-            className="w-full bg-[#171614] border border-[#2E2B25] focus:border-[#C5A880] focus:ring-1 focus:ring-[#C5A880] rounded-lg pl-9 pr-3 py-1.5 text-xs text-[#F3EFEA] placeholder-[#7A756D] outline-none"
+            placeholder="Search room, service, personnel..."
+            className="w-full bg-[#181715] border border-[#2E2B25] focus:border-[#C5A880] rounded-xl pl-9 pr-3 py-1.5 text-xs text-[#F3EFEA] placeholder-[#7E786E] outline-none"
           />
         </div>
       </div>
 
-      {/* Requests List */}
+      {/* Main Request Queue List */}
       {filteredRequests.length === 0 ? (
-        <div className="bg-[#171614] border border-[#2C2A26] rounded-xl p-12 text-center">
-          <div className="w-12 h-12 rounded-full bg-[#24211D] border border-[#38342D] mx-auto flex items-center justify-center text-[#7E786E] mb-3">
+        <div className="p-12 text-center bg-[#181715] border border-[#2B2924] rounded-2xl space-y-3">
+          <div className="w-12 h-12 rounded-full bg-[#262420] text-[#C5A880] flex items-center justify-center mx-auto">
             <CheckCircle2 className="w-6 h-6" />
           </div>
-          <h3 className="text-base font-semibold text-[#F3EFEA] font-serif-luxury">
-            No Requests in This View
-          </h3>
-          <p className="text-xs text-[#8E877C] mt-1 max-w-sm mx-auto">
-            {searchQuery
-              ? `No requests match "${searchQuery}".`
-              : statusFilter === 'ACTIVE'
-              ? 'All guest requests have been completed. The front desk queue is clear.'
-              : `No requests currently with status ${statusFilter}.`}
+          <h3 className="text-base font-bold text-[#F3EFEA]">No requests found in this queue</h3>
+          <p className="text-xs text-[#8E877C] max-w-sm mx-auto">
+            All guest requests for this filter have been satisfied. New in-room requests submitted via QR code will appear here in real time.
           </p>
           <div className="mt-4">
             <button
               type="button"
               onClick={() => setQuickTestModalOpen(true)}
-              className="text-xs px-3.5 py-2 rounded bg-[#2A2824] hover:bg-[#35322E] text-[#C5A880] border border-[#3E3A33] transition-colors"
+              className="text-xs px-3.5 py-2 rounded-lg bg-[#2A2824] hover:bg-[#35322E] text-[#C5A880] border border-[#3E3A33] transition-colors cursor-pointer"
             >
               + Create Test Request
             </button>
@@ -509,15 +635,18 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
         </div>
       ) : (
         <div className="space-y-3">
-          {filteredRequests.map((req) => {
+          {filteredRequests.map((req, index) => {
             const isNew = req.status === 'NEW';
             const isInProgress = req.status === 'IN_PROGRESS';
             const isCompleted = req.status === 'COMPLETED';
 
+            // Calculate FIFO Queue Position for active requests
+            const activeQueuePosition = isNew || isInProgress ? index + 1 : null;
+
             return (
               <div
                 key={req.id}
-                className={`rounded-xl border transition-all p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${
+                className={`rounded-2xl border transition-all p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 relative overflow-hidden ${
                   req.isEmergency
                     ? 'bg-[#231214] border-[#E63946] shadow-lg shadow-red-950/20'
                     : isNew
@@ -527,28 +656,44 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
                     : 'bg-[#151412] border-[#262420] opacity-75'
                 }`}
               >
-                {/* Left zone: Room, Category, Message, Meta */}
+                {/* Left zone: Room, Category, Message, Meta, Personnel */}
                 <div className="flex items-start gap-4 min-w-0">
-                  {/* Room Number Block */}
-                  <div
-                    onClick={() => onNavigateToGuest?.(req.roomNumber)}
-                    title={`Click to preview Room ${req.roomNumber} guest screen`}
-                    className={`px-3.5 py-2.5 rounded-lg border text-center shrink-0 cursor-pointer transition-transform hover:scale-105 ${
-                      req.isEmergency
-                        ? 'bg-[#E63946] text-white border-[#E63946] font-bold'
-                        : 'bg-[#141311] border-[#333029] text-[#F3EFEA]'
-                    }`}
-                  >
-                    <span className="text-[10px] block uppercase tracking-wider font-semibold opacity-80">
-                      Room
-                    </span>
-                    <span className="text-lg sm:text-xl font-bold font-mono leading-none">
-                      {req.roomNumber}
-                    </span>
+                  {/* Room Number Block with Queue Position */}
+                  <div className="flex flex-col items-center gap-1 shrink-0">
+                    <div
+                      onClick={() => onNavigateToGuest?.(req.roomNumber)}
+                      title={`Click to preview Room ${req.roomNumber} guest screen`}
+                      className={`px-3.5 py-2.5 rounded-xl border text-center cursor-pointer transition-transform hover:scale-105 ${
+                        req.isEmergency
+                          ? 'bg-[#E63946] text-white border-[#E63946] font-bold'
+                          : 'bg-[#141311] border-[#333029] text-[#F3EFEA]'
+                      }`}
+                    >
+                      <span className="text-[10px] block uppercase tracking-wider font-semibold opacity-80">
+                        Room
+                      </span>
+                      <span className="text-lg sm:text-xl font-bold font-mono leading-none">
+                        {req.roomNumber}
+                      </span>
+                    </div>
+
+                    {/* Queue Priority Indicator (First-Come, First-Served) */}
+                    {activeQueuePosition && (
+                      <span
+                        className={`text-[9px] px-1.5 py-0.5 rounded font-mono font-bold uppercase tracking-wider ${
+                          activeQueuePosition === 1
+                            ? 'bg-[#C5A880] text-[#121110]'
+                            : 'bg-[#262420] text-[#8E877C] border border-[#3E3A33]'
+                        }`}
+                        title="Position in First-Come, First-Served queue"
+                      >
+                        {activeQueuePosition === 1 ? 'Queue #1 (Next)' : `Queue #${activeQueuePosition}`}
+                      </span>
+                    )}
                   </div>
 
                   {/* Request Details */}
-                  <div className="min-w-0 space-y-1">
+                  <div className="min-w-0 space-y-1.5 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="flex items-center gap-1.5 text-sm sm:text-base font-bold text-[#F3EFEA]">
                         {getCategoryIcon(req.category)}
@@ -585,9 +730,41 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
 
                     {/* Guest Additional Message */}
                     {req.additionalMessage && (
-                      <p className="text-xs sm:text-sm text-[#D8D2C7] bg-[#141311]/70 border border-[#2B2924] rounded px-2.5 py-1.5 font-normal">
+                      <p className="text-xs sm:text-sm text-[#D8D2C7] bg-[#141311]/70 border border-[#2B2924] rounded-lg px-3 py-1.5 font-normal">
                         "{req.additionalMessage}"
                       </p>
+                    )}
+
+                    {/* Assigned Personnel Box (Visible when In-Progress or Completed) */}
+                    {(req.assignedStaffName || req.acceptedByStaffName) && (
+                      <div className="flex items-center gap-2 text-xs bg-[#221F1B] border border-[#3A352D] rounded-lg px-2.5 py-1 text-[#D8D2C7] w-fit">
+                        <UserCheck className="w-3.5 h-3.5 text-[#C5A880]" />
+                        <span>Assisting Personnel:</span>
+                        <strong className="text-[#F3EFEA] font-semibold">
+                          {req.assignedStaffName || req.acceptedByStaffName}
+                        </strong>
+                        {req.assignedStaffRole && (
+                          <span className="text-[10px] text-[#A89F91]">
+                            ({req.assignedStaffRole})
+                          </span>
+                        )}
+                        {isInProgress && (
+                          <button
+                            type="button"
+                            onClick={() => handleOpenAcceptModal(req)}
+                            className="text-[10px] text-[#C5A880] hover:underline ml-1 font-semibold cursor-pointer"
+                          >
+                            Reassign
+                          </button>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Staff Notes if any */}
+                    {req.staffNotes && (
+                      <div className="text-[11px] text-[#A89F91] italic bg-[#141311] px-2 py-0.5 rounded border border-[#2A2824] w-fit">
+                        Notes: {req.staffNotes}
+                      </div>
                     )}
 
                     {/* Timestamps */}
@@ -599,14 +776,13 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
 
                       {req.acceptedAt && (
                         <span className="text-[#B8B2A7]">
-                          • Accepted: {new Date(req.acceptedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                          {req.acceptedByStaffName ? ` (${req.acceptedByStaffName})` : ''}
+                          • Started: {new Date(req.acceptedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                         </span>
                       )}
 
                       {req.completedAt && (
                         <span className="text-[#86EFAC]">
-                          • Finished: {new Date(req.completedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          • Resolved: {new Date(req.completedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                           {req.completedByStaffName ? ` by ${req.completedByStaffName}` : ''}
                         </span>
                       )}
@@ -614,17 +790,17 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
                   </div>
                 </div>
 
-                {/* Right zone: Action buttons (ACCEPT and COMPLETED) */}
+                {/* Right zone: Action buttons (ACCEPT, COMPLETED, REOPEN, DELETE) */}
                 <div className="flex items-center gap-2 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-[#2A2823]">
-                  {/* If status is NEW: Show prominent ACCEPT button */}
+                  {/* If status is NEW: Show prominent ACCEPT button which prompts for personnel assignment */}
                   {isNew && (
                     <button
                       type="button"
-                      onClick={() => handleAccept(req.id)}
-                      className="flex-1 sm:flex-initial px-4 py-2.5 rounded-lg bg-[#C5A880] hover:bg-[#B39366] text-[#121110] font-bold text-xs tracking-wider uppercase transition-all shadow-md flex items-center justify-center gap-1.5 focus-visible:ring-2 focus-visible:ring-[#F3EFEA] focus-visible:outline-none cursor-pointer"
+                      onClick={() => handleOpenAcceptModal(req)}
+                      className="flex-1 sm:flex-initial px-4 py-2.5 rounded-xl bg-[#C5A880] hover:bg-[#B39366] text-[#121110] font-bold text-xs tracking-wider uppercase transition-all shadow-md flex items-center justify-center gap-1.5 focus-visible:ring-2 focus-visible:ring-[#F3EFEA] focus-visible:outline-none cursor-pointer"
                     >
-                      <Play className="w-3.5 h-3.5 fill-current" />
-                      <span>ACCEPT</span>
+                      <UserCheck className="w-4 h-4" />
+                      <span>ACCEPT &amp; ASSIGN</span>
                     </button>
                   )}
 
@@ -632,10 +808,10 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
                   {isInProgress && (
                     <button
                       type="button"
-                      onClick={() => handleComplete(req.id)}
-                      className="flex-1 sm:flex-initial px-4 py-2.5 rounded-lg bg-[#22C55E] hover:bg-[#16A34A] text-white font-bold text-xs tracking-wider uppercase transition-all shadow-md flex items-center justify-center gap-1.5 focus-visible:ring-2 focus-visible:ring-white focus-visible:outline-none cursor-pointer"
+                      onClick={() => handleComplete(req.id, req.assignedStaffName || currentUser?.name)}
+                      className="flex-1 sm:flex-initial px-4 py-2.5 rounded-xl bg-[#22C55E] hover:bg-[#16A34A] text-white font-bold text-xs tracking-wider uppercase transition-all shadow-md flex items-center justify-center gap-1.5 focus-visible:ring-2 focus-visible:ring-white focus-visible:outline-none cursor-pointer"
                     >
-                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      <CheckCircle2 className="w-4 h-4" />
                       <span>COMPLETED</span>
                     </button>
                   )}
@@ -646,7 +822,7 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
                       <button
                         type="button"
                         onClick={() => handleReopen(req.id)}
-                        className="px-2.5 py-1.5 rounded border border-[#33302A] text-[11px] text-[#B8B2A7] hover:text-[#F3EFEA] hover:bg-[#252320] transition-colors"
+                        className="px-2.5 py-1.5 rounded-lg border border-[#33302A] text-[11px] text-[#B8B2A7] hover:text-[#F3EFEA] hover:bg-[#252320] transition-colors cursor-pointer"
                         title="Reopen as New"
                       >
                         Re-open
@@ -654,10 +830,10 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
                       <button
                         type="button"
                         onClick={() => handleDelete(req.id)}
-                        className="p-1.5 rounded text-[#7E786E] hover:text-[#E63946] hover:bg-[#252320] transition-colors"
+                        className="p-1.5 rounded-lg text-[#7E786E] hover:text-[#E63946] hover:bg-[#252320] transition-colors cursor-pointer"
                         title="Delete record"
                       >
-                        <Trash2 className="w-3.5 h-3.5" />
+                        <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
                   )}
@@ -668,10 +844,40 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
         </div>
       )}
 
+      {/* Personnel Assignment Modal */}
+      <AssignPersonnelModal
+        isOpen={Boolean(assigningRequest)}
+        onClose={() => setAssigningRequest(null)}
+        request={assigningRequest}
+        currentUser={currentUser}
+        onConfirmAssignment={handleConfirmAssignment}
+        onOpenCreateAccount={() => setIsCreateAccountModalOpen(true)}
+        onOpenCreateStaff={() => setIsCreateStaffModalOpen(true)}
+      />
+
+      {/* Admin Add Staff Member Modal */}
+      <CreateStaffMemberModal
+        isOpen={isCreateStaffModalOpen}
+        onClose={() => setIsCreateStaffModalOpen(false)}
+        currentUser={currentUser}
+        onStaffCreated={() => {
+          setIsCreateStaffModalOpen(false);
+        }}
+      />
+
+      {/* Admin Quick Create Account / Add Personnel Modal */}
+      <CreateAccountModal
+        isOpen={isCreateAccountModalOpen}
+        onClose={() => setIsCreateAccountModalOpen(false)}
+        onAccountCreated={(newAcc) => {
+          setIsCreateAccountModalOpen(false);
+        }}
+      />
+
       {/* Quick Test Request Simulation Modal */}
       {quickTestModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
-          <div className="bg-[#1C1B18] border border-[#3E3A33] rounded-xl max-w-md w-full p-6 shadow-2xl">
+          <div className="bg-[#1C1B18] border border-[#3E3A33] rounded-2xl max-w-md w-full p-6 shadow-2xl">
             <h3 className="text-lg font-bold font-serif-luxury text-[#F3EFEA] mb-4">
               Simulate In-Room Guest Request
             </h3>
@@ -682,7 +888,7 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
                   type="text"
                   value={testRoom}
                   onChange={(e) => setTestRoom(e.target.value)}
-                  className="w-full bg-[#141311] border border-[#38342E] rounded px-3 py-2 text-sm text-[#F3EFEA] font-mono outline-none"
+                  className="w-full bg-[#141311] border border-[#38342E] rounded-lg px-3 py-2 text-sm text-[#F3EFEA] font-mono outline-none focus:border-[#C5A880]"
                   required
                 />
               </div>
@@ -692,7 +898,7 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
                 <select
                   value={testCategory}
                   onChange={(e) => setTestCategory(e.target.value as HotelRequest['category'])}
-                  className="w-full bg-[#141311] border border-[#38342E] rounded px-3 py-2 text-sm text-[#F3EFEA] outline-none"
+                  className="w-full bg-[#141311] border border-[#38342E] rounded-lg px-3 py-2 text-sm text-[#F3EFEA] outline-none focus:border-[#C5A880]"
                 >
                   <option value="Contact Front Desk">🛎️ Contact Front Desk</option>
                   <option value="Housekeeping">🧹 Housekeeping</option>
@@ -712,7 +918,7 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
                   value={testMessage}
                   onChange={(e) => setTestMessage(e.target.value)}
                   placeholder="e.g. Please send two pillows."
-                  className="w-full bg-[#141311] border border-[#38342E] rounded px-3 py-2 text-sm text-[#F3EFEA] outline-none"
+                  className="w-full bg-[#141311] border border-[#38342E] rounded-lg px-3 py-2 text-sm text-[#F3EFEA] outline-none focus:border-[#C5A880]"
                 />
               </div>
 
@@ -720,13 +926,13 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
                 <button
                   type="button"
                   onClick={() => setQuickTestModalOpen(false)}
-                  className="w-1/2 py-2 rounded border border-[#38342E] text-[#B8B2A7] hover:bg-[#252320]"
+                  className="w-1/2 py-2 rounded-lg border border-[#38342E] text-[#B8B2A7] hover:bg-[#252320]"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="w-1/2 py-2 rounded bg-[#C5A880] text-[#121110] font-bold"
+                  className="w-1/2 py-2 rounded-lg bg-[#C5A880] text-[#121110] font-bold"
                 >
                   Send Request
                 </button>

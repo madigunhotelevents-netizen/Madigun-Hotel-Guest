@@ -10,5 +10,15 @@ service cloud.firestore {
     match /accounts/{accountId} {
       allow read, write: if true;
     }
+
+    // Room Occupancy & Checkout Stays
+    match /room_stays/{roomNumber} {
+      allow read, write: if true;
+    }
+
+    // Hotel Staff Roster & Associates (Admin-managed)
+    match /staff_members/{staffId} {
+      allow read, write: if true;
+    }
   }
 }

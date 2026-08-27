@@ -12,12 +12,15 @@ import {
   ChevronDown,
   LogIn,
   KeyRound,
+  Building2,
 } from 'lucide-react';
 import { UserProfile, DutyStatus } from '../types/hotel';
 
+export type AppTab = 'guest' | 'frontdesk' | 'occupancy' | 'qr' | 'accounts';
+
 interface HeaderProps {
-  activeTab: 'guest' | 'frontdesk' | 'qr' | 'accounts';
-  setActiveTab: (tab: 'guest' | 'frontdesk' | 'qr' | 'accounts') => void;
+  activeTab: AppTab;
+  setActiveTab: (tab: AppTab) => void;
   newRequestsCount: number;
   soundEnabled: boolean;
   setSoundEnabled: (enabled: boolean) => void;
@@ -59,6 +62,7 @@ export const Header: React.FC<HeaderProps> = ({
   }, []);
 
   const isDeveloper = currentUser?.role === 'developer' || currentUser?.isPrimaryDeveloper;
+  const isFrontDeskOrStaff = currentUser && !isDeveloper;
 
   return (
     <header className="sticky top-0 z-40 bg-[#171614]/95 backdrop-blur-md border-b border-[#2C2A26] px-3 sm:px-6 py-2.5 sm:py-3 transition-colors no-print">
@@ -75,23 +79,27 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* Zone 2: Navigation Links */}
         <nav className="flex items-center gap-1 sm:gap-1.5 overflow-x-auto scrollbar-none py-0.5">
-          <button
-            type="button"
-            onClick={() => setActiveTab('guest')}
-            className={`whitespace-nowrap shrink-0 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-[#C5A880] focus-visible:outline-none cursor-pointer ${
-              activeTab === 'guest'
-                ? 'bg-[#C5A880] text-[#121110] font-semibold shadow-sm'
-                : 'text-[#B8B2A7] hover:text-[#F3EFEA] hover:bg-[#262421]'
-            }`}
-          >
-            <ConciergeBell className="w-3.5 h-3.5" />
-            <span className="hidden xs:inline">Guest View</span>
-            <span className="xs:hidden">Guest</span>
-            {activeTab === 'guest' && currentRoom ? (
-              <span className="hidden sm:inline opacity-80">(Rm {currentRoom})</span>
-            ) : null}
-          </button>
+          {/* Guest View Tab (Hidden when logged in as Front Desk staff to focus on Front Desk tasks) */}
+          {!isFrontDeskOrStaff && (
+            <button
+              type="button"
+              onClick={() => setActiveTab('guest')}
+              className={`whitespace-nowrap shrink-0 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-[#C5A880] focus-visible:outline-none cursor-pointer ${
+                activeTab === 'guest'
+                  ? 'bg-[#C5A880] text-[#121110] font-semibold shadow-sm'
+                  : 'text-[#B8B2A7] hover:text-[#F3EFEA] hover:bg-[#262421]'
+              }`}
+            >
+              <ConciergeBell className="w-3.5 h-3.5" />
+              <span className="hidden xs:inline">Guest View</span>
+              <span className="xs:hidden">Guest</span>
+              {activeTab === 'guest' && currentRoom ? (
+                <span className="hidden sm:inline opacity-80">(Rm {currentRoom})</span>
+              ) : null}
+            </button>
+          )}
 
+          {/* Front Desk Tab (Always available to Front Desk staff and Admins) */}
           <button
             type="button"
             onClick={() => setActiveTab('frontdesk')}
@@ -110,35 +118,53 @@ export const Header: React.FC<HeaderProps> = ({
             )}
           </button>
 
+          {/* Room Occupancy & Keycards Tab (Front Desk and Admin) */}
           <button
             type="button"
-            onClick={() => setActiveTab('accounts')}
+            onClick={() => setActiveTab('occupancy')}
             className={`whitespace-nowrap shrink-0 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-[#C5A880] focus-visible:outline-none cursor-pointer ${
-              activeTab === 'accounts'
+              activeTab === 'occupancy'
                 ? 'bg-[#C5A880] text-[#121110] font-semibold shadow-sm'
                 : 'text-[#B8B2A7] hover:text-[#F3EFEA] hover:bg-[#262421]'
             }`}
           >
-            <Users className="w-3.5 h-3.5" />
-            <span>Accounts</span>
-            {isDeveloper && (
-              <Crown className="w-3 h-3 text-[#C5A880] hidden sm:inline" />
-            )}
+            <Building2 className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Room Occupancy</span>
+            <span className="sm:hidden">Occupancy</span>
           </button>
 
-          <button
-            type="button"
-            onClick={() => setActiveTab('qr')}
-            className={`whitespace-nowrap shrink-0 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-[#C5A880] focus-visible:outline-none cursor-pointer ${
-              activeTab === 'qr'
-                ? 'bg-[#C5A880] text-[#121110] font-semibold shadow-sm'
-                : 'text-[#B8B2A7] hover:text-[#F3EFEA] hover:bg-[#262421]'
-            }`}
-          >
-            <QrCode className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">QR Codes</span>
-            <span className="sm:hidden">QR</span>
-          </button>
+          {/* Admin-only tabs: Staff & Accounts, QR Stand Cards */}
+          {isDeveloper && (
+            <>
+              <button
+                type="button"
+                onClick={() => setActiveTab('accounts')}
+                className={`whitespace-nowrap shrink-0 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-[#C5A880] focus-visible:outline-none cursor-pointer ${
+                  activeTab === 'accounts'
+                    ? 'bg-[#C5A880] text-[#121110] font-semibold shadow-sm'
+                    : 'text-[#B8B2A7] hover:text-[#F3EFEA] hover:bg-[#262421]'
+                }`}
+              >
+                <Users className="w-3.5 h-3.5" />
+                <span>Staff &amp; Accounts</span>
+                <Crown className="w-3 h-3 text-[#C5A880] hidden sm:inline" />
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveTab('qr')}
+                className={`whitespace-nowrap shrink-0 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-[#C5A880] focus-visible:outline-none cursor-pointer ${
+                  activeTab === 'qr'
+                    ? 'bg-[#C5A880] text-[#121110] font-semibold shadow-sm'
+                    : 'text-[#B8B2A7] hover:text-[#F3EFEA] hover:bg-[#262421]'
+                }`}
+              >
+                <QrCode className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">QR Cards</span>
+                <span className="sm:hidden">QR</span>
+              </button>
+            </>
+          )}
         </nav>
 
         {/* Zone 3: User Profile & Sound Actions */}
@@ -192,120 +218,102 @@ export const Header: React.FC<HeaderProps> = ({
                   />
                 </div>
 
-                {/* User Name & Role (Hidden on mobile) */}
-                <div className="hidden md:block text-left leading-tight min-w-0 max-w-[120px]">
-                  <span className="text-xs font-bold block truncate text-[#F3EFEA]">
-                    {currentUser.name}
-                  </span>
-                  <span className="text-[10px] text-[#C5A880] block truncate">
-                    {isDeveloper ? '👑 Primary Admin' : currentUser.roleTitle}
+                <div className="hidden sm:block text-left">
+                  <div className="flex items-center gap-1">
+                    <span className="text-xs font-bold text-[#F3EFEA] truncate max-w-[100px]">
+                      {currentUser.name}
+                    </span>
+                    {isDeveloper && <Crown className="w-3 h-3 text-[#C5A880]" />}
+                  </div>
+                  <span className="text-[10px] text-[#A89F91] block truncate max-w-[100px]">
+                    {currentUser.roleTitle}
                   </span>
                 </div>
 
                 <ChevronDown className="w-3.5 h-3.5 text-[#8E877C] hidden sm:block" />
               </button>
 
-              {/* Dropdown Menu */}
+              {/* User Dropdown Menu */}
               {isUserMenuOpen && (
-                <div className="absolute right-0 mt-2 w-64 bg-[#1C1B18] border border-[#3E3A33] rounded-xl shadow-2xl p-2.5 z-50 text-xs space-y-2 animate-fade-in">
-                  {/* User Profile Header in dropdown */}
-                  <div className="p-2 bg-[#141311] border border-[#2B2924] rounded-lg space-y-1">
-                    <div className="flex items-center justify-between">
-                      <span className="font-bold text-[#F3EFEA] truncate">
-                        {currentUser.name}
-                      </span>
-                      {isDeveloper && (
-                        <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-[#C5A880] text-[#121110] uppercase">
-                          Developer
-                        </span>
-                      )}
+                <div className="absolute right-0 mt-2 w-64 bg-[#191815] border border-[#3E3A33] rounded-xl shadow-2xl p-3 text-xs space-y-3 z-50 animate-fade-in">
+                  <div className="flex items-center gap-3 pb-2 border-b border-[#2C2A26]">
+                    <div
+                      className="w-9 h-9 rounded-lg flex items-center justify-center font-bold text-sm"
+                      style={{
+                        backgroundColor: `${currentUser.avatarColor}25`,
+                        color: currentUser.avatarColor,
+                      }}
+                    >
+                      {currentUser.name.charAt(0)}
                     </div>
-                    <p className="text-[11px] text-[#C5A880] truncate">
-                      {currentUser.roleTitle}
-                    </p>
-                    <p className="text-[10px] text-[#8E877C]">
-                      {currentUser.department} • @{currentUser.username}
-                    </p>
+                    <div className="min-w-0">
+                      <div className="font-bold text-[#F3EFEA] truncate flex items-center gap-1">
+                        <span>{currentUser.name}</span>
+                        {isDeveloper && <Crown className="w-3.5 h-3.5 text-[#C5A880]" />}
+                      </div>
+                      <span className="text-[11px] text-[#C5A880] font-medium block truncate">
+                        {currentUser.roleTitle}
+                      </span>
+                      <span className="text-[10px] text-[#8E877C] block truncate">
+                        @{currentUser.username} • {currentUser.department}
+                      </span>
+                    </div>
                   </div>
 
-                  {/* Duty Status Quick Toggle */}
-                  <div className="px-1 space-y-1">
-                    <span className="text-[10px] uppercase tracking-wider text-[#8E877C] font-semibold block">
+                  {/* Duty Status Selector */}
+                  <div className="space-y-1.5">
+                    <span className="text-[10px] text-[#8E877C] uppercase tracking-wider font-semibold block">
                       Duty Status
                     </span>
                     <div className="grid grid-cols-3 gap-1">
                       <button
                         type="button"
                         onClick={() => onSetDutyStatus('ON_DUTY')}
-                        className={`py-1 rounded text-[10px] font-semibold border transition-all cursor-pointer ${
+                        className={`py-1 px-1.5 rounded text-[10px] font-semibold transition-all ${
                           currentUser.dutyStatus === 'ON_DUTY'
-                            ? 'bg-[#22C55E]/20 text-[#86EFAC] border-[#22C55E]/50'
-                            : 'bg-[#141311] text-[#8E877C] border-[#2A2824] hover:text-[#F3EFEA]'
+                            ? 'bg-[#22C55E] text-[#121110] font-bold'
+                            : 'bg-[#24211D] text-[#A89F91] hover:text-white'
                         }`}
                       >
-                        🟢 On Duty
+                        On Duty
                       </button>
                       <button
                         type="button"
                         onClick={() => onSetDutyStatus('ON_BREAK')}
-                        className={`py-1 rounded text-[10px] font-semibold border transition-all cursor-pointer ${
+                        className={`py-1 px-1.5 rounded text-[10px] font-semibold transition-all ${
                           currentUser.dutyStatus === 'ON_BREAK'
-                            ? 'bg-[#EAB308]/20 text-[#FDE047] border-[#EAB308]/50'
-                            : 'bg-[#141311] text-[#8E877C] border-[#2A2824] hover:text-[#F3EFEA]'
+                            ? 'bg-[#EAB308] text-[#121110] font-bold'
+                            : 'bg-[#24211D] text-[#A89F91] hover:text-white'
                         }`}
                       >
-                        🟡 Break
+                        On Break
                       </button>
                       <button
                         type="button"
                         onClick={() => onSetDutyStatus('OFF_DUTY')}
-                        className={`py-1 rounded text-[10px] font-semibold border transition-all cursor-pointer ${
+                        className={`py-1 px-1.5 rounded text-[10px] font-semibold transition-all ${
                           currentUser.dutyStatus === 'OFF_DUTY'
-                            ? 'bg-[#6B7280]/20 text-[#D1D5DB] border-[#6B7280]/50'
-                            : 'bg-[#141311] text-[#8E877C] border-[#2A2824] hover:text-[#F3EFEA]'
+                            ? 'bg-[#6B7280] text-white font-bold'
+                            : 'bg-[#24211D] text-[#A89F91] hover:text-white'
                         }`}
                       >
-                        ⚪ Off Duty
+                        Off Duty
                       </button>
                     </div>
                   </div>
 
-                  {/* Menu Items */}
-                  <div className="border-t border-[#2B2924] pt-1.5 space-y-1">
+                  {/* Links */}
+                  <div className="pt-2 border-t border-[#2C2A26] space-y-1">
                     <button
                       type="button"
                       onClick={() => {
                         setIsUserMenuOpen(false);
                         onOpenProfile();
                       }}
-                      className="w-full text-left px-2.5 py-1.5 rounded-lg text-[#D8D2C7] hover:text-[#F3EFEA] hover:bg-[#252320] transition-colors flex items-center gap-2 cursor-pointer"
+                      className="w-full text-left py-1.5 px-2 rounded-lg hover:bg-[#24211D] text-[#D8D2C7] hover:text-white transition-colors flex items-center gap-2"
                     >
                       <User className="w-3.5 h-3.5 text-[#C5A880]" />
-                      <span>My Personal Profile</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIsUserMenuOpen(false);
-                        setActiveTab('accounts');
-                      }}
-                      className="w-full text-left px-2.5 py-1.5 rounded-lg text-[#D8D2C7] hover:text-[#F3EFEA] hover:bg-[#252320] transition-colors flex items-center gap-2 cursor-pointer"
-                    >
-                      <Users className="w-3.5 h-3.5 text-[#C5A880]" />
-                      <span>Staff Accounts Directory</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIsUserMenuOpen(false);
-                        onOpenLogin();
-                      }}
-                      className="w-full text-left px-2.5 py-1.5 rounded-lg text-[#D8D2C7] hover:text-[#F3EFEA] hover:bg-[#252320] transition-colors flex items-center gap-2 cursor-pointer"
-                    >
-                      <KeyRound className="w-3.5 h-3.5 text-[#C5A880]" />
-                      <span>Switch Account / Sign In</span>
+                      <span>View Profile &amp; Bio</span>
                     </button>
 
                     <button
@@ -314,10 +322,10 @@ export const Header: React.FC<HeaderProps> = ({
                         setIsUserMenuOpen(false);
                         onLogout();
                       }}
-                      className="w-full text-left px-2.5 py-1.5 rounded-lg text-[#E63946] hover:bg-[#2A1517] transition-colors flex items-center gap-2 cursor-pointer"
+                      className="w-full text-left py-1.5 px-2 rounded-lg hover:bg-[#E63946]/15 text-[#FF8B94] hover:text-[#FF8B94] transition-colors flex items-center gap-2"
                     >
                       <LogOut className="w-3.5 h-3.5" />
-                      <span>Sign Out</span>
+                      <span>Log Out of System</span>
                     </button>
                   </div>
                 </div>
@@ -327,10 +335,10 @@ export const Header: React.FC<HeaderProps> = ({
             <button
               type="button"
               onClick={onOpenLogin}
-              className="text-xs px-3 py-1.5 rounded-lg bg-[#C5A880] hover:bg-[#B39366] text-[#121110] font-bold transition-all flex items-center gap-1.5 shadow-sm cursor-pointer"
+              className="px-3 py-1.5 rounded-lg bg-[#C5A880] hover:bg-[#B39366] text-[#121110] text-xs font-bold transition-all shadow-sm flex items-center gap-1.5 cursor-pointer"
             >
               <LogIn className="w-3.5 h-3.5" />
-              <span>Staff Sign In</span>
+              <span>Staff Login</span>
             </button>
           )}
         </div>

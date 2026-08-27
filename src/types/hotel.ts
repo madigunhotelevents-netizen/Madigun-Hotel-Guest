@@ -34,7 +34,24 @@ export interface HotelRequest {
   completedAt?: number;
   staffNotes?: string;
   acceptedByStaffName?: string;
+  assignedStaffId?: string;
+  assignedStaffName?: string;
+  assignedStaffRole?: string;
+  assignedStaffDepartment?: string;
   completedByStaffName?: string;
+}
+
+export type RoomStayStatus = 'OCCUPIED' | 'CHECKED_OUT';
+
+export interface RoomStay {
+  roomNumber: string;
+  status: RoomStayStatus;
+  guestName?: string;
+  accessCode?: string; // Automatically generated code e.g. "MDG-4821" or "7849"
+  checkInAt?: number;
+  checkOutAt?: number;
+  lastUpdated: number;
+  notes?: string;
 }
 
 export type UserRole = 'developer' | 'staff';
@@ -58,6 +75,19 @@ export interface UserProfile {
   dutyStatus: DutyStatus;
   createdAt: number;
   lastLoginAt?: number;
+}
+
+export interface StaffMember {
+  id: string;
+  name: string;
+  roleTitle: string; // e.g. "Housekeeping Associate", "Front Desk Concierge", "Maintenance Technician", "Room Runner", "Luggage Porter"
+  department: 'Front Desk' | 'Housekeeping' | 'Maintenance' | 'Dining & Room Service' | 'Security' | 'General Operations';
+  phone: string;
+  shift: string;
+  dutyStatus: DutyStatus;
+  notes?: string;
+  createdAt: number;
+  createdByAdmin?: string;
 }
 
 

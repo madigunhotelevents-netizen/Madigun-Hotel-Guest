@@ -4,9 +4,10 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { Header } from './components/Header';
+import { Header, AppTab } from './components/Header';
 import { GuestView } from './components/GuestView';
 import { FrontDeskView } from './components/FrontDeskView';
+import { RoomOccupancyView } from './components/RoomOccupancyView';
 import { QRManagementView } from './components/QRManagementView';
 import { AccountsManagementView } from './components/AccountsManagementView';
 import { LoginModal } from './components/LoginModal';
@@ -23,7 +24,7 @@ import { playConciergeBell, playUrgentAlert } from './services/soundService';
 import { UserProfile, DutyStatus } from './types/hotel';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'guest' | 'frontdesk' | 'qr' | 'accounts'>('guest');
+  const [activeTab, setActiveTab] = useState<AppTab>('guest');
   const [roomNumber, setRoomNumber] = useState<string>('101');
   const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
   const [newRequestsCount, setNewRequestsCount] = useState<number>(0);
@@ -34,8 +35,8 @@ export default function App() {
   const [isProfileModalOpen, setIsProfileModalOpen] = useState<boolean>(false);
 
   // Helper to extract room number and view mode from URL params, paths, and hashes
-  const parseUrlState = () => {
-    if (typeof window === 'undefined') return { room: '101', view: 'guest' as const };
+  const parseUrlState = (): { room: string; view: AppTab } => {
+    if (typeof window === 'undefined') return { room: '101', view: 'guest' };
 
     const searchParams = new URLSearchParams(window.location.search);
     let detectedRoom = searchParams.get('room') || searchParams.get('r') || searchParams.get('rm');
@@ -68,32 +69,34 @@ export default function App() {
     // If a room parameter is detected in the URL, it is a guest scanning a QR code!
     if (detectedRoom) {
       localStorage.setItem('madigun_active_guest_room', detectedRoom);
-      return { room: detectedRoom, view: 'guest' as const };
+      return { room: detectedRoom, view: 'guest' };
     }
 
     // Staff explicit views
     if (viewParam === 'frontdesk' || viewParam === 'staff') {
-      return { room: localStorage.getItem('madigun_active_guest_room') || '101', view: 'frontdesk' as const };
+      return { room: localStorage.getItem('madigun_active_guest_room') || '101', view: 'frontdesk' };
+    }
+    if (viewParam === 'occupancy' || viewParam === 'rooms') {
+      return { room: localStorage.getItem('madigun_active_guest_room') || '101', view: 'occupancy' };
     }
     if (viewParam === 'qr') {
-      return { room: localStorage.getItem('madigun_active_guest_room') || '101', view: 'qr' as const };
+      return { room: localStorage.getItem('madigun_active_guest_room') || '101', view: 'qr' };
     }
     if (viewParam === 'accounts' || viewParam === 'employees') {
-      return { room: localStorage.getItem('madigun_active_guest_room') || '101', view: 'accounts' as const };
+      return { room: localStorage.getItem('madigun_active_guest_room') || '101', view: 'accounts' };
     }
 
     // Default: Automatic Guest User Interface (No login required)
     const savedGuestRoom = localStorage.getItem('madigun_active_guest_room') || '101';
-    return { room: savedGuestRoom, view: 'guest' as const };
+    return { room: savedGuestRoom, view: 'guest' };
   };
 
-  // Initialize room number and tab from URL & automatically remove Netlify badge/widgets
+  // Initialize room number and tab from URL
   useEffect(() => {
     const { room, view } = parseUrlState();
     setRoomNumber(room);
     setActiveTab(view);
 
-    // Listen to popstate / history changes
     const handlePopState = () => {
       const parsed = parseUrlState();
       setRoomNumber(parsed.room);
@@ -101,43 +104,7 @@ export default function App() {
     };
 
     window.addEventListener('popstate', handlePopState);
-
-    // Automatically remove/hide any Netlify badge, preview bar, or feedback drawer
-    const hideNetlifyElements = () => {
-      const selectors = [
-        '#netlify-identity-widget',
-        '[data-netlify-deploy-id]',
-        '[class*="netlify"]',
-        '[id*="netlify"]',
-        'iframe[src*="netlify"]',
-        'a[href*="netlify.com"]',
-        'a[href*="netlify.app"]',
-      ];
-      selectors.forEach((sel) => {
-        try {
-          document.querySelectorAll(sel).forEach((el) => {
-            (el as HTMLElement).style.setProperty('display', 'none', 'important');
-            (el as HTMLElement).style.setProperty('visibility', 'hidden', 'important');
-            (el as HTMLElement).style.setProperty('opacity', '0', 'important');
-            (el as HTMLElement).style.setProperty('pointer-events', 'none', 'important');
-          });
-        } catch {}
-      });
-    };
-
-    hideNetlifyElements();
-    const netlifyInterval = setInterval(hideNetlifyElements, 1000);
-
-    const observer = new MutationObserver(() => {
-      hideNetlifyElements();
-    });
-    observer.observe(document.body, { childList: true, subtree: true });
-
-    return () => {
-      window.removeEventListener('popstate', handlePopState);
-      clearInterval(netlifyInterval);
-      observer.disconnect();
-    };
+    return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
   // Update new requests counter & subscribe to alerts
@@ -168,10 +135,18 @@ export default function App() {
 
   // Sync user state and listen to auth events
   useEffect(() => {
-    setCurrentUserState(getCurrentUser());
+    const user = getCurrentUser();
+    setCurrentUserState(user);
+    if (user && user.role === 'staff') {
+      setActiveTab('frontdesk');
+    }
 
     const unsubscribeAuth = subscribeToAuthEvents(() => {
-      setCurrentUserState(getCurrentUser());
+      const updatedUser = getCurrentUser();
+      setCurrentUserState(updatedUser);
+      if (updatedUser && updatedUser.role === 'staff') {
+        setActiveTab('frontdesk');
+      }
     });
 
     return unsubscribeAuth;
@@ -191,14 +166,14 @@ export default function App() {
   const handleLogout = () => {
     logout();
     setCurrentUserState(null);
+    setActiveTab('guest');
   };
 
-  // Handler when staff clicks "Test Room Screen" from QR generator or Front Desk
+  // Handler when staff clicks "Test Room Screen" from QR generator, Occupancy view, or Front Desk
   const handleNavigateToGuestForRoom = (targetRoom: string) => {
     setRoomNumber(targetRoom);
     setActiveTab('guest');
 
-    // Update URL param cleanly without reload
     const url = new URL(window.location.href);
     url.searchParams.set('room', targetRoom);
     url.searchParams.delete('view');
@@ -252,6 +227,13 @@ export default function App() {
           />
         )}
 
+        {activeTab === 'occupancy' && (
+          <RoomOccupancyView
+            currentUser={currentUser}
+            onSelectRoomForGuestView={handleNavigateToGuestForRoom}
+          />
+        )}
+
         {activeTab === 'accounts' && (
           <AccountsManagementView
             onOpenLoginModal={() => setIsLoginModalOpen(true)}
@@ -271,6 +253,9 @@ export default function App() {
         onClose={() => setIsLoginModalOpen(false)}
         onLoginSuccess={(user) => {
           setCurrentUserState(user);
+          if (user.role === 'staff') {
+            setActiveTab('frontdesk');
+          }
         }}
       />
 

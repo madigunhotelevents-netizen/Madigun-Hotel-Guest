@@ -19,8 +19,12 @@ import {
   Layers,
   Activity,
   Trash2,
+  ShieldCheck,
+  Building,
+  KeyRound,
+  FileText,
 } from 'lucide-react';
-import { UserProfile, DutyStatus, UserRole } from '../types/hotel';
+import { UserProfile, DutyStatus, UserRole, StaffMember } from '../types/hotel';
 import {
   getAllAccounts,
   getCurrentUser,
@@ -29,7 +33,15 @@ import {
   resetToDemoAccounts,
   deleteAccount,
 } from '../services/authService';
+import {
+  getAllStaffMembers,
+  deleteStaffMember,
+  setStaffMemberDutyStatus,
+  resetToDemoStaffMembers,
+  subscribeToRequestEvents,
+} from '../services/storageService';
 import { CreateAccountModal } from './CreateAccountModal';
+import { CreateStaffMemberModal } from './CreateStaffMemberModal';
 import { EditAccountModal } from './EditAccountModal';
 import { ProfileModal } from './ProfileModal';
 
@@ -40,30 +52,39 @@ interface AccountsManagementViewProps {
 export const AccountsManagementView: React.FC<AccountsManagementViewProps> = ({
   onOpenLoginModal,
 }) => {
+  const [activeSubTab, setActiveSubTab] = useState<'staff_roster' | 'login_accounts'>('staff_roster');
+  
+  // Data state
   const [accounts, setAccounts] = useState<UserProfile[]>([]);
+  const [staffMembers, setStaffMembers] = useState<StaffMember[]>([]);
   const [currentUser, setCurrentUserState] = useState<UserProfile | null>(null);
+  
+  // Filters & Search
   const [searchQuery, setSearchQuery] = useState('');
   const [departmentFilter, setDepartmentFilter] = useState('ALL');
-  const [roleFilter, setRoleFilter] = useState<'ALL' | 'developer' | 'staff'>('ALL');
   const [statusFilter, setStatusFilter] = useState<'ALL' | DutyStatus>('ALL');
 
   // Modals state
-  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [isCreateAccountModalOpen, setIsCreateAccountModalOpen] = useState(false);
+  const [isCreateStaffModalOpen, setIsCreateStaffModalOpen] = useState(false);
   const [accountToEdit, setAccountToEdit] = useState<UserProfile | null>(null);
   const [accountToViewProfile, setAccountToViewProfile] = useState<UserProfile | null>(null);
   const [notificationMsg, setNotificationMsg] = useState<{ type: 'success' | 'info' | 'error'; text: string } | null>(null);
 
   const loadData = () => {
     setAccounts(getAllAccounts());
+    setStaffMembers(getAllStaffMembers());
     setCurrentUserState(getCurrentUser());
   };
 
   useEffect(() => {
     loadData();
-    const unsubscribe = subscribeToAuthEvents(() => {
-      loadData();
-    });
-    return unsubscribe;
+    const unsubAuth = subscribeToAuthEvents(() => loadData());
+    const unsubStorage = subscribeToRequestEvents(() => loadData());
+    return () => {
+      unsubAuth();
+      unsubStorage();
+    };
   }, []);
 
   const isDeveloper = currentUser?.role === 'developer' || currentUser?.isPrimaryDeveloper;
@@ -75,11 +96,29 @@ export const AccountsManagementView: React.FC<AccountsManagementViewProps> = ({
     }, 3500);
   };
 
-  // Filtered Accounts
+  // Filtered Staff Roster (Associates without login accounts)
+  const filteredStaffMembers = useMemo(() => {
+    return staffMembers.filter((staff) => {
+      if (departmentFilter !== 'ALL' && staff.department !== departmentFilter) return false;
+      if (statusFilter !== 'ALL' && staff.dutyStatus !== statusFilter) return false;
+
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        const matchesName = staff.name.toLowerCase().includes(q);
+        const matchesRole = staff.roleTitle.toLowerCase().includes(q);
+        const matchesDept = staff.department.toLowerCase().includes(q);
+        const matchesPhone = (staff.phone || '').toLowerCase().includes(q);
+        const matchesNotes = (staff.notes || '').toLowerCase().includes(q);
+        return matchesName || matchesRole || matchesDept || matchesPhone || matchesNotes;
+      }
+      return true;
+    });
+  }, [staffMembers, departmentFilter, statusFilter, searchQuery]);
+
+  // Filtered System Accounts
   const filteredAccounts = useMemo(() => {
     return accounts.filter((acc) => {
       if (departmentFilter !== 'ALL' && acc.department !== departmentFilter) return false;
-      if (roleFilter !== 'ALL' && acc.role !== roleFilter) return false;
       if (statusFilter !== 'ALL' && acc.dutyStatus !== statusFilter) return false;
 
       if (searchQuery.trim()) {
@@ -91,26 +130,28 @@ export const AccountsManagementView: React.FC<AccountsManagementViewProps> = ({
         const matchesEmail = acc.email.toLowerCase().includes(q);
         return matchesName || matchesUsername || matchesDept || matchesRole || matchesEmail;
       }
-
       return true;
     });
-  }, [accounts, departmentFilter, roleFilter, statusFilter, searchQuery]);
+  }, [accounts, departmentFilter, statusFilter, searchQuery]);
 
   // Statistics
   const stats = useMemo(() => {
-    const total = accounts.length;
-    const onDuty = accounts.filter((a) => a.dutyStatus === 'ON_DUTY').length;
-    const onBreak = accounts.filter((a) => a.dutyStatus === 'ON_BREAK').length;
-    const devs = accounts.filter((a) => a.role === 'developer' || a.isPrimaryDeveloper).length;
-    const depts = new Set(accounts.map((a) => a.department)).size;
-    return { total, onDuty, onBreak, devs, depts };
-  }, [accounts]);
+    const totalStaff = staffMembers.length;
+    const totalAccounts = accounts.length;
+    const onDutyCount =
+      staffMembers.filter((s) => s.dutyStatus === 'ON_DUTY').length +
+      accounts.filter((a) => a.dutyStatus === 'ON_DUTY').length;
+    return { totalStaff, totalAccounts, onDutyCount };
+  }, [staffMembers, accounts]);
 
   // Unique departments for filter
   const departmentsList = useMemo(() => {
-    const depts = new Set(accounts.map((a) => a.department));
+    const depts = new Set([
+      ...accounts.map((a) => a.department),
+      ...staffMembers.map((s) => s.department),
+    ]);
     return Array.from(depts).filter(Boolean);
-  }, [accounts]);
+  }, [accounts, staffMembers]);
 
   const handleSwitchUser = (target: UserProfile) => {
     setCurrentUser(target);
@@ -118,480 +159,535 @@ export const AccountsManagementView: React.FC<AccountsManagementViewProps> = ({
     showToast('success', `Switched active session to ${target.name} (${target.roleTitle})`);
   };
 
+  const handleToggleStaffDuty = (staffId: string, currentStatus: DutyStatus) => {
+    const nextStatus: DutyStatus =
+      currentStatus === 'ON_DUTY' ? 'ON_BREAK' : currentStatus === 'ON_BREAK' ? 'OFF_DUTY' : 'ON_DUTY';
+    const updated = setStaffMemberDutyStatus(staffId, nextStatus);
+    setStaffMembers(updated);
+    showToast('info', `Updated staff duty status to ${nextStatus.replace('_', ' ')}`);
+  };
+
+  const handleDeleteStaff = (staffId: string, staffName: string) => {
+    if (!isDeveloper) {
+      showToast('error', 'Only Administrators can remove staff members.');
+      return;
+    }
+    if (confirm(`Are you sure you want to remove "${staffName}" from the staff directory?`)) {
+      const updated = deleteStaffMember(staffId);
+      setStaffMembers(updated);
+      showToast('success', `Removed ${staffName} from staff roster.`);
+    }
+  };
+
   const handleResetDefaults = () => {
-    const res = resetToDemoAccounts();
-    setAccounts(res);
-    setCurrentUserState(res[0]);
-    showToast('info', 'Accounts reset to initial hotel demo staff profiles.');
+    const resAccounts = resetToDemoAccounts();
+    const resStaff = resetToDemoStaffMembers();
+    setAccounts(resAccounts);
+    setStaffMembers(resStaff);
+    setCurrentUserState(resAccounts[0]);
+    showToast('info', 'Reset both staff directory and system accounts to default hotel roster.');
   };
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-6 sm:py-8 space-y-6">
+      {/* Toast Notification */}
+      {notificationMsg && (
+        <div
+          className={`fixed bottom-6 right-6 z-50 px-4 py-3 rounded-xl shadow-2xl font-bold text-xs flex items-center gap-2 animate-fade-in border ${
+            notificationMsg.type === 'success'
+              ? 'bg-[#10B981] text-[#121110] border-[#34D399]'
+              : notificationMsg.type === 'error'
+              ? 'bg-[#E63946] text-white border-[#FCA5A5]'
+              : 'bg-[#C5A880] text-[#121110] border-[#E5D5B8]'
+          }`}
+        >
+          <Sparkles className="w-4 h-4" />
+          <span>{notificationMsg.text}</span>
+        </div>
+      )}
+
       {/* Top Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[#2C2A26] pb-5">
         <div>
           <div className="flex items-center gap-2">
             <span className="text-xs uppercase tracking-widest text-[#C5A880] font-semibold flex items-center gap-1.5">
               <Users className="w-3.5 h-3.5" />
-              <span>Accounts &amp; Access Directory</span>
+              <span>Hotel Staff &amp; System Access Control</span>
             </span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-bold font-serif-luxury text-[#F3EFEA]">
-            Staff Accounts Management
+            Staff &amp; Accounts Management
           </h1>
-          <p className="text-xs sm:text-sm text-[#9E978C] mt-0.5">
-            Administer employee accounts, profiles, credentials, and departmental roles
+          <p className="text-xs text-[#A89F91] mt-1">
+            General hotel associates (Housekeeping, Porters, Maintenance) are listed here for dispatch assignment. Only Front Desk, Housekeeping Supervisors, and Admins require system logins.
           </p>
         </div>
 
-        {/* Header Actions */}
-        <div className="flex items-center gap-2 flex-wrap">
+        {/* Action Buttons */}
+        <div className="flex items-center gap-2.5 flex-wrap">
           {isDeveloper ? (
-            <button
-              type="button"
-              onClick={() => setIsCreateModalOpen(true)}
-              className="text-xs px-3.5 py-2 rounded-lg bg-[#C5A880] hover:bg-[#B39366] text-[#121110] font-bold transition-all flex items-center gap-1.5 shadow-sm cursor-pointer"
-            >
-              <UserPlus className="w-4 h-4" />
-              <span>+ Create Employee Account</span>
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={onOpenLoginModal}
-              className="text-xs px-3.5 py-2 rounded-lg bg-[#24211D] hover:bg-[#302B25] border border-[#C5A880]/50 text-[#C5A880] font-semibold transition-all flex items-center gap-1.5"
-              title="Sign in as developer to create accounts"
-            >
-              <Crown className="w-3.5 h-3.5 text-[#C5A880]" />
-              <span>Developer Sign In</span>
-            </button>
-          )}
+            <>
+              <button
+                type="button"
+                onClick={() => setIsCreateStaffModalOpen(true)}
+                className="px-4 py-2 rounded-xl bg-[#C5A880] hover:bg-[#B39366] text-[#121110] text-xs font-bold transition-all shadow-md flex items-center gap-1.5 cursor-pointer"
+              >
+                <UserPlus className="w-4 h-4" />
+                <span>+ Add Staff Member</span>
+              </button>
 
-          <button
-            type="button"
-            onClick={handleResetDefaults}
-            className="text-xs px-3 py-2 rounded-lg bg-[#1C1B18] hover:bg-[#252320] border border-[#33302A] text-[#9E978C] hover:text-[#F3EFEA] transition-colors flex items-center gap-1"
-            title="Reset staff list to default demo accounts"
-          >
-            <RotateCcw className="w-3 h-3" />
-            <span>Reset Demo</span>
-          </button>
+              <button
+                type="button"
+                onClick={() => setIsCreateAccountModalOpen(true)}
+                className="px-3 py-2 rounded-xl bg-[#24211D] hover:bg-[#322E29] border border-[#3E3A33] text-[#E5D5B8] text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer"
+              >
+                <KeyRound className="w-3.5 h-3.5 text-[#C5A880]" />
+                <span className="hidden sm:inline">Add Login Account</span>
+                <span className="sm:hidden">Add Login</span>
+              </button>
+            </>
+          ) : (
+            <div className="text-xs text-[#A89F91] bg-[#24211D] border border-[#3E3A33] px-3 py-2 rounded-xl flex items-center gap-1.5">
+              <ShieldCheck className="w-3.5 h-3.5 text-[#C5A880]" />
+              <span>Admin only can add staff members</span>
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Developer Authority / Access Banner */}
-      <div
-        className={`rounded-xl border p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm transition-all ${
-          isDeveloper
-            ? 'bg-[#211C15] border-[#C5A880]/60'
-            : 'bg-[#181715] border-[#33302A]'
-        }`}
-      >
-        <div className="flex items-start gap-3.5">
-          <div
-            className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
-              isDeveloper
-                ? 'bg-[#C5A880]/20 text-[#C5A880] border border-[#C5A880]/50'
-                : 'bg-[#2A2824] text-[#A8A196] border border-[#3E3A33]'
-            }`}
-          >
-            {isDeveloper ? <Crown className="w-5 h-5" /> : <Shield className="w-5 h-5" />}
+      {/* KPI Stats Bar */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4">
+        <div className="bg-[#171614] border border-[#2C2A26] rounded-xl p-4 flex items-center justify-between">
+          <div>
+            <span className="text-[11px] text-[#A89F91] uppercase tracking-wider block font-semibold">
+              Hotel Staff Associates
+            </span>
+            <span className="text-2xl font-bold font-serif-luxury text-[#F3EFEA]">
+              {stats.totalStaff}
+            </span>
           </div>
-          <div className="space-y-0.5">
-            <div className="flex items-center gap-2">
-              <h3 className="text-sm font-bold font-serif-luxury text-[#F3EFEA]">
-                {isDeveloper
-                  ? '👑 Primary Admin / Developer Authority Active'
-                  : currentUser
-                  ? `Logged in as: ${currentUser.name} (${currentUser.roleTitle})`
-                  : 'Viewing as Guest / Logged Out'}
-              </h3>
-              {isDeveloper && (
-                <span className="px-2 py-0.2 rounded text-[10px] font-bold bg-[#C5A880] text-[#121110] uppercase tracking-wider">
-                  Full Authority
-                </span>
-              )}
-            </div>
-            <p className="text-xs text-[#B8B2A7] leading-relaxed">
-              {isDeveloper
-                ? 'As Primary Developer Admin, you have unrestricted authority to create employee accounts, modify all profiles, update credentials, and manage system roles.'
-                : 'Employee accounts can manage front desk requests and update their personal profile. Switch to the Developer Account to create new accounts or edit all staff.'}
-            </p>
+          <div className="w-10 h-10 rounded-xl bg-[#3B82F6]/15 border border-[#3B82F6]/30 flex items-center justify-center text-[#60A5FA]">
+            <Users className="w-5 h-5" />
           </div>
         </div>
 
-        {!isDeveloper && (
+        <div className="bg-[#171614] border border-[#2C2A26] rounded-xl p-4 flex items-center justify-between">
+          <div>
+            <span className="text-[11px] text-[#A89F91] uppercase tracking-wider block font-semibold">
+              System Login Accounts
+            </span>
+            <span className="text-2xl font-bold font-serif-luxury text-[#C5A880]">
+              {stats.totalAccounts}
+            </span>
+          </div>
+          <div className="w-10 h-10 rounded-xl bg-[#C5A880]/15 border border-[#C5A880]/30 flex items-center justify-center text-[#C5A880]">
+            <KeyRound className="w-5 h-5" />
+          </div>
+        </div>
+
+        <div className="bg-[#171614] border border-[#2C2A26] rounded-xl p-4 flex items-center justify-between col-span-2 sm:col-span-1">
+          <div>
+            <span className="text-[11px] text-[#A89F91] uppercase tracking-wider block font-semibold">
+              Total On Duty Now
+            </span>
+            <span className="text-2xl font-bold font-serif-luxury text-[#22C55E]">
+              {stats.onDutyCount}
+            </span>
+          </div>
+          <div className="w-10 h-10 rounded-xl bg-[#22C55E]/15 border border-[#22C55E]/30 flex items-center justify-center text-[#22C55E]">
+            <CheckCircle2 className="w-5 h-5" />
+          </div>
+        </div>
+      </div>
+
+      {/* Sub Tabs: Staff Roster vs System Logins */}
+      <div className="flex items-center justify-between border-b border-[#2C2A26] pb-1">
+        <div className="flex items-center gap-2">
           <button
             type="button"
-            onClick={() => {
-              const devAcc = accounts.find((a) => a.role === 'developer' || a.isPrimaryDeveloper);
-              if (devAcc) handleSwitchUser(devAcc);
-              else onOpenLoginModal();
-            }}
-            className="px-3.5 py-2 rounded-lg bg-[#C5A880] hover:bg-[#B39366] text-[#121110] font-bold text-xs whitespace-nowrap shadow-sm shrink-0 flex items-center justify-center gap-1.5"
+            onClick={() => setActiveSubTab('staff_roster')}
+            className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center gap-2 cursor-pointer ${
+              activeSubTab === 'staff_roster'
+                ? 'bg-[#C5A880] text-[#121110] shadow-sm'
+                : 'text-[#B8B2A7] hover:text-white hover:bg-[#24211D]'
+            }`}
           >
-            <Crown className="w-3.5 h-3.5" />
-            <span>Switch to Developer Admin</span>
+            <Users className="w-4 h-4" />
+            <span>Staff Directory &amp; Associates ({staffMembers.length})</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveSubTab('login_accounts')}
+            className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center gap-2 cursor-pointer ${
+              activeSubTab === 'login_accounts'
+                ? 'bg-[#C5A880] text-[#121110] shadow-sm'
+                : 'text-[#B8B2A7] hover:text-white hover:bg-[#24211D]'
+            }`}
+          >
+            <KeyRound className="w-4 h-4" />
+            <span>System Login Accounts ({accounts.length})</span>
+          </button>
+        </div>
+
+        {isDeveloper && (
+          <button
+            type="button"
+            onClick={handleResetDefaults}
+            className="text-[11px] text-[#8E877C] hover:text-[#C5A880] flex items-center gap-1 transition-colors"
+          >
+            <RotateCcw className="w-3 h-3" />
+            <span className="hidden sm:inline">Reset Default Demo Roster</span>
           </button>
         )}
       </div>
 
-      {/* Toast Notification Alert */}
-      {notificationMsg && (
-        <div
-          className={`rounded-xl p-3.5 text-xs flex items-center gap-2.5 shadow-lg animate-fade-in ${
-            notificationMsg.type === 'success'
-              ? 'bg-[#14291B] border border-[#22C55E]/50 text-[#86EFAC]'
-              : notificationMsg.type === 'error'
-              ? 'bg-[#2A1517] border border-[#E63946]/50 text-[#FFCCD5]'
-              : 'bg-[#1A2234] border border-[#3B82F6]/50 text-[#93C5FD]'
-          }`}
-        >
-          {notificationMsg.type === 'success' && <CheckCircle2 className="w-4 h-4 text-[#22C55E] shrink-0" />}
-          {notificationMsg.type === 'error' && <AlertCircle className="w-4 h-4 text-[#E63946] shrink-0" />}
-          {notificationMsg.type === 'info' && <Sparkles className="w-4 h-4 text-[#3B82F6] shrink-0" />}
-          <span className="font-medium">{notificationMsg.text}</span>
-        </div>
-      )}
-
-      {/* Stats Cards Row */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
-        <div className="bg-[#171614] border border-[#2C2A26] rounded-xl p-3.5 sm:p-4 space-y-1">
-          <span className="text-[11px] font-semibold uppercase tracking-wider text-[#8E877C] block">
-            Total Accounts
-          </span>
-          <span className="text-xl sm:text-2xl font-bold font-mono text-[#F3EFEA]">
-            {stats.total}
-          </span>
-        </div>
-
-        <div className="bg-[#171614] border border-[#2C2A26] rounded-xl p-3.5 sm:p-4 space-y-1">
-          <span className="text-[11px] font-semibold uppercase tracking-wider text-[#8E877C] block flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-[#22C55E] animate-pulse" />
-            <span>Staff On Duty</span>
-          </span>
-          <span className="text-xl sm:text-2xl font-bold font-mono text-[#86EFAC]">
-            {stats.onDuty}
-          </span>
-        </div>
-
-        <div className="bg-[#171614] border border-[#2C2A26] rounded-xl p-3.5 sm:p-4 space-y-1">
-          <span className="text-[11px] font-semibold uppercase tracking-wider text-[#8E877C] block">
-            Primary / Dev Admins
-          </span>
-          <span className="text-xl sm:text-2xl font-bold font-mono text-[#C5A880]">
-            {stats.devs}
-          </span>
-        </div>
-
-        <div className="bg-[#171614] border border-[#2C2A26] rounded-xl p-3.5 sm:p-4 space-y-1">
-          <span className="text-[11px] font-semibold uppercase tracking-wider text-[#8E877C] block">
-            Departments
-          </span>
-          <span className="text-xl sm:text-2xl font-bold font-mono text-[#D8D2C7]">
-            {stats.depts}
-          </span>
-        </div>
-      </div>
-
-      {/* Filter and Search Bar */}
-      <div className="space-y-3">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-          {/* Department Pills */}
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0 scrollbar-none">
-            <button
-              type="button"
-              onClick={() => setDepartmentFilter('ALL')}
-              className={`text-xs px-3 py-1.5 rounded-lg font-semibold transition-all whitespace-nowrap ${
-                departmentFilter === 'ALL'
-                  ? 'bg-[#C5A880] text-[#121110] shadow-sm'
-                  : 'bg-[#1C1B18] text-[#B8B2A7] hover:bg-[#252320] border border-[#2E2B25]'
-              }`}
-            >
-              All Departments ({accounts.length})
-            </button>
-
-            {departmentsList.map((dept) => (
-              <button
-                key={dept}
-                type="button"
-                onClick={() => setDepartmentFilter(dept)}
-                className={`text-xs px-3 py-1.5 rounded-lg font-semibold transition-all whitespace-nowrap ${
-                  departmentFilter === dept
-                    ? 'bg-[#C5A880] text-[#121110] shadow-sm'
-                    : 'bg-[#1C1B18] text-[#B8B2A7] hover:bg-[#252320] border border-[#2E2B25]'
-                }`}
-              >
-                {dept}
-              </button>
-            ))}
-          </div>
-
-          {/* Search box */}
-          <div className="relative w-full md:w-64">
-            <Search className="w-4 h-4 text-[#7A756D] absolute left-3 top-1/2 -translate-y-1/2" />
+      {/* Search and Filters Bar */}
+      <div className="bg-[#171614] border border-[#2C2A26] rounded-2xl p-4 space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="relative flex-1">
+            <Search className="w-4 h-4 text-[#7E786E] absolute left-3.5 top-1/2 -translate-y-1/2" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search staff, username..."
-              className="w-full bg-[#171614] border border-[#2E2B25] focus:border-[#C5A880] focus:ring-1 focus:ring-[#C5A880] rounded-lg pl-9 pr-3 py-1.5 text-xs text-[#F3EFEA] placeholder-[#7A756D] outline-none"
+              placeholder="Search by name, role title, phone or notes..."
+              className="w-full bg-[#141311] border border-[#2B2822] focus:border-[#C5A880] rounded-xl pl-10 pr-4 py-2 text-xs sm:text-sm text-[#F3EFEA] placeholder-[#7E786E] outline-none"
             />
           </div>
-        </div>
 
-        {/* Secondary Filters: Role & Duty */}
-        <div className="flex flex-wrap items-center gap-2 text-xs">
-          <span className="text-[#8E877C] font-semibold">Filter:</span>
-          <select
-            value={roleFilter}
-            onChange={(e) => setRoleFilter(e.target.value as any)}
-            className="bg-[#1C1B18] border border-[#2E2B25] rounded-md px-2.5 py-1 text-xs text-[#D8D2C7] outline-none"
-          >
-            <option value="ALL">All Roles</option>
-            <option value="developer">👑 Developers / Admins</option>
-            <option value="staff">🛡️ Staff Employees</option>
-          </select>
+          <div className="flex items-center gap-2 flex-wrap">
+            <select
+              value={departmentFilter}
+              onChange={(e) => setDepartmentFilter(e.target.value)}
+              className="bg-[#141311] border border-[#2B2822] text-[#D8D2C7] text-xs rounded-xl px-3 py-2 outline-none focus:border-[#C5A880]"
+            >
+              <option value="ALL">All Departments</option>
+              {departmentsList.map((dept) => (
+                <option key={dept} value={dept}>
+                  {dept}
+                </option>
+              ))}
+            </select>
 
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value as any)}
-            className="bg-[#1C1B18] border border-[#2E2B25] rounded-md px-2.5 py-1 text-xs text-[#D8D2C7] outline-none"
-          >
-            <option value="ALL">All Duty Statuses</option>
-            <option value="ON_DUTY">🟢 On Duty</option>
-            <option value="ON_BREAK">🟡 On Break</option>
-            <option value="OFF_DUTY">⚪ Off Duty</option>
-          </select>
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value as any)}
+              className="bg-[#141311] border border-[#2B2822] text-[#D8D2C7] text-xs rounded-xl px-3 py-2 outline-none focus:border-[#C5A880]"
+            >
+              <option value="ALL">All Duty Statuses</option>
+              <option value="ON_DUTY">On Duty</option>
+              <option value="ON_BREAK">On Break</option>
+              <option value="OFF_DUTY">Off Duty</option>
+            </select>
+          </div>
         </div>
       </div>
 
-      {/* Accounts Grid */}
-      {filteredAccounts.length === 0 ? (
-        <div className="bg-[#171614] border border-[#2C2A26] rounded-xl p-12 text-center">
-          <div className="w-12 h-12 rounded-full bg-[#24211D] border border-[#38342D] mx-auto flex items-center justify-center text-[#7E786E] mb-3">
-            <Users className="w-6 h-6" />
+      {/* View Section 1: Staff Directory & Associates (No Logins Needed) */}
+      {activeSubTab === 'staff_roster' && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between text-xs text-[#A89F91]">
+            <span>Showing {filteredStaffMembers.length} staff associates</span>
+            <span className="text-[#C5A880] font-medium">Available for Front Desk Task Delegation</span>
           </div>
-          <h3 className="text-base font-semibold text-[#F3EFEA] font-serif-luxury">
-            No Accounts Found
-          </h3>
-          <p className="text-xs text-[#8E877C] mt-1 max-w-sm mx-auto">
-            {searchQuery
-              ? `No accounts matched "${searchQuery}".`
-              : 'No accounts in the selected filter.'}
-          </p>
-          {isDeveloper && (
-            <div className="mt-4">
-              <button
-                type="button"
-                onClick={() => setIsCreateModalOpen(true)}
-                className="text-xs px-3.5 py-2 rounded bg-[#C5A880] hover:bg-[#B39366] text-[#121110] font-bold"
-              >
-                + Create New Account
-              </button>
-            </div>
-          )}
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {filteredAccounts.map((account) => {
-            const isTargetDev = account.role === 'developer' || account.isPrimaryDeveloper;
-            const isCurrentUserCard = currentUser?.id === account.id;
 
-            return (
-              <div
-                key={account.id}
-                className={`rounded-xl border p-4 sm:p-5 flex flex-col justify-between gap-4 transition-all ${
-                  account.isPrimaryDeveloper
-                    ? 'bg-[#1D1913] border-[#C5A880]/60 shadow-md'
-                    : isCurrentUserCard
-                    ? 'bg-[#1A1916] border-[#3B82F6]/50 shadow-sm'
-                    : 'bg-[#171614] border-[#2A2824] hover:border-[#3E3A33]'
-                }`}
-              >
-                {/* Top: Avatar, Name, Badges */}
-                <div className="space-y-3">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex items-start gap-3 min-w-0">
-                      {/* Avatar with duty dot */}
-                      <div className="relative shrink-0">
-                        <div
-                          className="w-12 h-12 rounded-xl flex items-center justify-center text-lg font-bold font-serif-luxury shadow-md"
-                          style={{
-                            backgroundColor: `${account.avatarColor}25`,
-                            color: account.avatarColor,
-                            border: `1.5px solid ${account.avatarColor}60`,
-                          }}
-                        >
-                          {isTargetDev ? <Crown className="w-6 h-6 text-[#C5A880]" /> : account.name.charAt(0)}
+          {filteredStaffMembers.length === 0 ? (
+            <div className="bg-[#171614] border border-[#2C2A26] rounded-2xl p-8 text-center space-y-3">
+              <Users className="w-10 h-10 text-[#7E786E] mx-auto" />
+              <h3 className="text-base font-bold text-[#F3EFEA]">No staff members found</h3>
+              <p className="text-xs text-[#A89F91] max-w-sm mx-auto">
+                No hotel staff match your active search filters.
+              </p>
+              {isDeveloper && (
+                <button
+                  type="button"
+                  onClick={() => setIsCreateStaffModalOpen(true)}
+                  className="px-4 py-2 rounded-xl bg-[#C5A880] text-[#121110] text-xs font-bold mt-2"
+                >
+                  + Add First Staff Member
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {filteredStaffMembers.map((staff) => {
+                const isOnDuty = staff.dutyStatus === 'ON_DUTY';
+                const isOnBreak = staff.dutyStatus === 'ON_BREAK';
+
+                return (
+                  <div
+                    key={staff.id}
+                    className="bg-[#171614] border border-[#2C2A26] hover:border-[#3E3A33] rounded-2xl p-4 sm:p-5 flex flex-col justify-between space-y-4 transition-all"
+                  >
+                    <div>
+                      {/* Card Header */}
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="w-10 h-10 rounded-xl bg-[#3B82F6]/15 border border-[#3B82F6]/30 flex items-center justify-center font-bold text-[#60A5FA] text-base shrink-0">
+                            {staff.name.charAt(0)}
+                          </div>
+                          <div className="min-w-0">
+                            <h3 className="text-sm font-bold text-[#F3EFEA] truncate">
+                              {staff.name}
+                            </h3>
+                            <span className="text-xs text-[#C5A880] font-medium block truncate">
+                              {staff.roleTitle}
+                            </span>
+                          </div>
                         </div>
-                        <span
-                          className={`absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-[#171614] ${
-                            account.dutyStatus === 'ON_DUTY'
-                              ? 'bg-[#22C55E]'
-                              : account.dutyStatus === 'ON_BREAK'
-                              ? 'bg-[#EAB308]'
-                              : 'bg-[#6B7280]'
+
+                        {/* Duty Status Badge */}
+                        <button
+                          type="button"
+                          onClick={() => handleToggleStaffDuty(staff.id, staff.dutyStatus)}
+                          title="Click to toggle duty status"
+                          className={`text-[10px] px-2.5 py-1 rounded-full font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                            isOnDuty
+                              ? 'bg-[#22C55E]/15 text-[#86EFAC] border border-[#22C55E]/30'
+                              : isOnBreak
+                              ? 'bg-[#EAB308]/15 text-[#FDE047] border border-[#EAB308]/30'
+                              : 'bg-[#6B7280]/20 text-[#D1D5DB] border border-[#6B7280]/30'
                           }`}
-                          title={`Status: ${account.dutyStatus}`}
-                        />
+                        >
+                          <span
+                            className={`w-1.5 h-1.5 rounded-full ${
+                              isOnDuty ? 'bg-[#22C55E]' : isOnBreak ? 'bg-[#EAB308]' : 'bg-[#6B7280]'
+                            }`}
+                          />
+                          {isOnDuty ? 'On Duty' : isOnBreak ? 'On Break' : 'Off Duty'}
+                        </button>
                       </div>
 
-                      {/* Name & Role */}
-                      <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          <h4 className="text-sm sm:text-base font-bold text-[#F3EFEA] truncate">
-                            {account.name}
-                          </h4>
-                          {isCurrentUserCard && (
-                            <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-[#3B82F6]/20 text-[#93C5FD] border border-[#3B82F6]/40 uppercase tracking-wider">
-                              You
-                            </span>
-                          )}
+                      {/* Details Box */}
+                      <div className="mt-3.5 bg-[#121110] border border-[#24211D] rounded-xl p-3 space-y-1.5 text-xs">
+                        <div className="flex items-center justify-between text-[#8E877C]">
+                          <span className="flex items-center gap-1">
+                            <Building className="w-3 h-3" />
+                            <span>Department</span>
+                          </span>
+                          <span className="font-semibold text-[#D8D2C7]">{staff.department}</span>
                         </div>
-                        <p className="text-xs text-[#C5A880] font-medium truncate">
-                          {account.roleTitle}
-                        </p>
-                        <p className="text-[11px] text-[#8E877C] font-mono">
-                          @{account.username}
-                        </p>
+
+                        <div className="flex items-center justify-between text-[#8E877C]">
+                          <span className="flex items-center gap-1">
+                            <Clock className="w-3 h-3" />
+                            <span>Assigned Shift</span>
+                          </span>
+                          <span className="text-[#D8D2C7] truncate max-w-[160px]">{staff.shift}</span>
+                        </div>
+
+                        {staff.phone && (
+                          <div className="flex items-center justify-between text-[#8E877C]">
+                            <span className="flex items-center gap-1">
+                              <Phone className="w-3 h-3" />
+                              <span>Contact Phone</span>
+                            </span>
+                            <span className="font-mono text-[#D8D2C7]">{staff.phone}</span>
+                          </div>
+                        )}
+
+                        {staff.notes && (
+                          <div className="pt-1.5 border-t border-[#201E1B] text-[11px] text-[#A89F91] italic">
+                            "{staff.notes}"
+                          </div>
+                        )}
                       </div>
                     </div>
 
-                    {/* Role Badge */}
-                    <div className="shrink-0">
-                      {account.isPrimaryDeveloper ? (
-                        <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-[#C5A880]/20 text-[#E5D5B8] border border-[#C5A880]/50 uppercase tracking-wider flex items-center gap-1">
-                          <Crown className="w-3 h-3 text-[#C5A880]" />
-                          Primary Admin
-                        </span>
-                      ) : isTargetDev ? (
-                        <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-[#C5A880]/20 text-[#E5D5B8] border border-[#C5A880]/50 uppercase tracking-wider">
-                          Developer
-                        </span>
-                      ) : (
-                        <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-[#2A2824] text-[#A8A196] border border-[#3E3A33] uppercase tracking-wider">
-                          {account.department}
-                        </span>
+                    {/* Card Actions */}
+                    <div className="pt-2 border-t border-[#24211D] flex items-center justify-between">
+                      <span className="text-[10px] text-[#7E786E]">
+                        Registered Associate
+                      </span>
+
+                      {isDeveloper && (
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteStaff(staff.id, staff.name)}
+                          className="text-xs text-[#E63946] hover:text-[#FF8B94] flex items-center gap-1 font-semibold transition-colors"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          <span>Remove</span>
+                        </button>
                       )}
                     </div>
                   </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
 
-                  {/* Metadata info */}
-                  <div className="bg-[#121110] border border-[#262420] rounded-lg p-2.5 text-xs space-y-1.5">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] text-[#B8B2A7]">
-                      <div className="flex items-center gap-1.5 truncate">
-                        <Briefcase className="w-3 h-3 text-[#C5A880] shrink-0" />
-                        <span className="truncate">{account.department}</span>
+      {/* View Section 2: System Login Accounts */}
+      {activeSubTab === 'login_accounts' && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between text-xs text-[#A89F91]">
+            <span>Showing {filteredAccounts.length} system login profiles</span>
+            <span className="text-[#C5A880] font-medium">Front Desk &amp; Housekeeping Supervisors</span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {filteredAccounts.map((acc) => {
+              const isCurrentSession = currentUser?.id === acc.id;
+              const isDev = acc.role === 'developer' || acc.isPrimaryDeveloper;
+
+              return (
+                <div
+                  key={acc.id}
+                  className={`bg-[#171614] border rounded-2xl p-4 sm:p-5 flex flex-col justify-between space-y-4 transition-all ${
+                    isCurrentSession
+                      ? 'border-[#C5A880] shadow-md bg-gradient-to-b from-[#242019] to-[#171614]'
+                      : 'border-[#2C2A26] hover:border-[#3E3A33]'
+                  }`}
+                >
+                  <div>
+                    {/* Account Header */}
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div
+                          className="w-10 h-10 rounded-xl flex items-center justify-center font-bold text-white text-base shrink-0 shadow-sm"
+                          style={{ backgroundColor: acc.avatarColor || '#C5A880' }}
+                        >
+                          {acc.name.charAt(0)}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <h3 className="text-sm font-bold text-[#F3EFEA] truncate">
+                              {acc.name}
+                            </h3>
+                            {isDev && <Crown className="w-3.5 h-3.5 text-[#C5A880] shrink-0" />}
+                          </div>
+                          <span className="text-xs text-[#C5A880] font-medium block truncate">
+                            {acc.roleTitle}
+                          </span>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-1.5 truncate">
-                        <Clock className="w-3 h-3 text-[#C5A880] shrink-0" />
-                        <span className="truncate">{account.shift || 'Standard'}</span>
-                      </div>
-                      <div className="flex items-center gap-1.5 truncate">
-                        <Mail className="w-3 h-3 text-[#C5A880] shrink-0" />
-                        <span className="truncate">{account.email}</span>
-                      </div>
-                      <div className="flex items-center gap-1.5 truncate">
-                        <Phone className="w-3 h-3 text-[#C5A880] shrink-0" />
-                        <span className="truncate">{account.phone || 'No phone'}</span>
-                      </div>
+
+                      {isCurrentSession ? (
+                        <span className="text-[10px] bg-[#C5A880] text-[#121110] px-2 py-0.5 rounded-full font-bold uppercase">
+                          Active
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => handleSwitchUser(acc)}
+                          className="text-[10px] bg-[#24211D] hover:bg-[#322E29] border border-[#3E3A33] text-[#D8D2C7] px-2 py-0.5 rounded-full font-semibold transition-colors"
+                        >
+                          Switch User
+                        </button>
+                      )}
                     </div>
 
-                    {account.bio && (
-                      <p className="text-[11px] text-[#8E877C] italic line-clamp-1 border-t border-[#22201D] pt-1">
-                        "{account.bio}"
-                      </p>
-                    )}
-                  </div>
-                </div>
+                    {/* Account Details Box */}
+                    <div className="mt-3.5 bg-[#121110] border border-[#24211D] rounded-xl p-3 space-y-1.5 text-xs">
+                      <div className="flex items-center justify-between text-[#8E877C]">
+                        <span className="flex items-center gap-1">
+                          <User className="w-3 h-3" />
+                          <span>Username</span>
+                        </span>
+                        <span className="font-mono text-[#D8D2C7] font-semibold">{acc.username}</span>
+                      </div>
 
-                {/* Bottom Actions Toolbar */}
-                <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-[#262420]">
-                  {/* Quick Switch / Active Session Status */}
-                  <div>
-                    {isCurrentUserCard ? (
-                      <span className="text-[11px] font-semibold text-[#86EFAC] flex items-center gap-1">
-                        <CheckCircle2 className="w-3 h-3" />
-                        <span>Active Session</span>
-                      </span>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => handleSwitchUser(account)}
-                        className="text-[11px] px-2.5 py-1 rounded bg-[#221F1B] hover:bg-[#2F2A24] border border-[#3B362F] text-[#D8D2C7] hover:text-[#C5A880] transition-colors flex items-center gap-1"
-                        title="Switch active user to test this account"
-                      >
-                        <LogIn className="w-3 h-3 text-[#C5A880]" />
-                        <span>Switch User</span>
-                      </button>
-                    )}
+                      <div className="flex items-center justify-between text-[#8E877C]">
+                        <span className="flex items-center gap-1">
+                          <Building className="w-3 h-3" />
+                          <span>Department</span>
+                        </span>
+                        <span className="text-[#D8D2C7]">{acc.department}</span>
+                      </div>
+
+                      <div className="flex items-center justify-between text-[#8E877C]">
+                        <span className="flex items-center gap-1">
+                          <Mail className="w-3 h-3" />
+                          <span>Email</span>
+                        </span>
+                        <span className="text-[#D8D2C7] truncate max-w-[150px]">{acc.email}</span>
+                      </div>
+
+                      <div className="flex items-center justify-between text-[#8E877C]">
+                        <span className="flex items-center gap-1">
+                          <KeyRound className="w-3 h-3" />
+                          <span>Password</span>
+                        </span>
+                        <span className="font-mono text-[#7E786E]">password123</span>
+                      </div>
+                    </div>
                   </div>
 
-                  {/* Edit & Profile Buttons */}
-                  <div className="flex items-center gap-1.5">
+                  {/* Actions */}
+                  <div className="pt-2 border-t border-[#24211D] flex items-center justify-between">
                     <button
                       type="button"
-                      onClick={() => setAccountToViewProfile(account)}
-                      className="px-2.5 py-1 rounded bg-[#1C1B18] hover:bg-[#252320] border border-[#33302A] text-xs text-[#D8D2C7] hover:text-[#F3EFEA] transition-colors flex items-center gap-1"
-                      title="View personal profile"
+                      onClick={() => setAccountToViewProfile(acc)}
+                      className="text-xs text-[#C5A880] hover:text-[#E5D5B8] font-semibold flex items-center gap-1"
                     >
-                      <User className="w-3 h-3 text-[#C5A880]" />
-                      <span>Personal Profile</span>
+                      <User className="w-3.5 h-3.5" />
+                      <span>View Profile</span>
                     </button>
 
-                    {(isDeveloper || isCurrentUserCard) && (
+                    {isDeveloper && (
                       <button
                         type="button"
-                        onClick={() => setAccountToEdit(account)}
-                        className="px-2.5 py-1 rounded bg-[#C5A880] hover:bg-[#B39366] text-[#121110] text-xs font-bold transition-colors flex items-center gap-1 shadow-sm"
-                        title="Edit account details"
+                        onClick={() => setAccountToEdit(acc)}
+                        className="text-xs text-[#D8D2C7] hover:text-white flex items-center gap-1 font-semibold"
                       >
-                        <Edit className="w-3 h-3" />
+                        <Edit className="w-3.5 h-3.5" />
                         <span>Edit</span>
                       </button>
                     )}
                   </div>
                 </div>
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
       )}
 
       {/* Modals */}
+      <CreateStaffMemberModal
+        isOpen={isCreateStaffModalOpen}
+        onClose={() => setIsCreateStaffModalOpen(false)}
+        currentUser={currentUser}
+        onStaffCreated={(newStaff) => {
+          setStaffMembers(getAllStaffMembers());
+          showToast('success', `Added ${newStaff.name} to the hotel staff directory.`);
+        }}
+      />
+
       <CreateAccountModal
-        isOpen={isCreateModalOpen}
-        onClose={() => setIsCreateModalOpen(false)}
+        isOpen={isCreateAccountModalOpen}
+        onClose={() => setIsCreateAccountModalOpen(false)}
         onAccountCreated={(newAcc) => {
-          loadData();
-          showToast('success', `Employee account for "${newAcc.name}" created successfully!`);
+          setAccounts(getAllAccounts());
+          showToast('success', `Created login account for ${newAcc.name}.`);
         }}
       />
 
-      <EditAccountModal
-        isOpen={Boolean(accountToEdit)}
-        onClose={() => setAccountToEdit(null)}
-        accountToEdit={accountToEdit}
-        onAccountSaved={(saved) => {
-          loadData();
-          showToast('success', `Account "${saved.name}" updated successfully.`);
-        }}
-        onAccountDeleted={(deletedId) => {
-          loadData();
-          showToast('info', 'Employee account removed from directory.');
-        }}
-      />
+      {accountToEdit && (
+        <EditAccountModal
+          isOpen={Boolean(accountToEdit)}
+          account={accountToEdit}
+          onClose={() => setAccountToEdit(null)}
+          onAccountUpdated={(updated) => {
+            setAccounts(getAllAccounts());
+            showToast('success', `Updated account for ${updated.name}.`);
+          }}
+        />
+      )}
 
-      <ProfileModal
-        isOpen={Boolean(accountToViewProfile)}
-        onClose={() => setAccountToViewProfile(null)}
-        targetAccount={accountToViewProfile}
-        onProfileUpdated={(updated) => {
-          loadData();
-          showToast('success', `Personal profile for "${updated.name}" updated.`);
-        }}
-      />
+      {accountToViewProfile && (
+        <ProfileModal
+          isOpen={Boolean(accountToViewProfile)}
+          account={accountToViewProfile}
+          onClose={() => setAccountToViewProfile(null)}
+          onEditRequested={(acc) => {
+            setAccountToViewProfile(null);
+            setAccountToEdit(acc);
+          }}
+        />
+      )}
     </div>
   );
 };
