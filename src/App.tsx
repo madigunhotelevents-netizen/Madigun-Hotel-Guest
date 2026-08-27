@@ -91,7 +91,7 @@ export default function App() {
     return { room: savedGuestRoom, view: 'guest' as const };
   };
 
-  // Initialize room number and tab from URL
+  // Initialize room number and tab from URL & automatically remove Netlify badge/widgets
   useEffect(() => {
     const { room, view } = parseUrlState();
     setRoomNumber(room);
@@ -105,7 +105,43 @@ export default function App() {
     };
 
     window.addEventListener('popstate', handlePopState);
-    return () => window.removeEventListener('popstate', handlePopState);
+
+    // Automatically remove/hide any Netlify badge, preview bar, or feedback drawer
+    const hideNetlifyElements = () => {
+      const selectors = [
+        '#netlify-identity-widget',
+        '[data-netlify-deploy-id]',
+        '[class*="netlify"]',
+        '[id*="netlify"]',
+        'iframe[src*="netlify"]',
+        'a[href*="netlify.com"]',
+        'a[href*="netlify.app"]',
+      ];
+      selectors.forEach((sel) => {
+        try {
+          document.querySelectorAll(sel).forEach((el) => {
+            (el as HTMLElement).style.setProperty('display', 'none', 'important');
+            (el as HTMLElement).style.setProperty('visibility', 'hidden', 'important');
+            (el as HTMLElement).style.setProperty('opacity', '0', 'important');
+            (el as HTMLElement).style.setProperty('pointer-events', 'none', 'important');
+          });
+        } catch {}
+      });
+    };
+
+    hideNetlifyElements();
+    const netlifyInterval = setInterval(hideNetlifyElements, 1000);
+
+    const observer = new MutationObserver(() => {
+      hideNetlifyElements();
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+      clearInterval(netlifyInterval);
+      observer.disconnect();
+    };
   }, []);
 
   // Update new requests counter & subscribe to alerts
