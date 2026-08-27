@@ -20,6 +20,8 @@ import {
   MessageSquare,
   ShieldAlert,
   Trash2,
+  Moon,
+  Sun,
 } from 'lucide-react';
 import { HotelRequest, RequestStatus, UserProfile } from '../types/hotel';
 import {
@@ -31,6 +33,7 @@ import {
   createNewRequest,
 } from '../services/storageService';
 import { playConciergeBell, playUrgentAlert, playSuccessChime } from '../services/soundService';
+import { useServiceSchedule } from '../services/scheduleService';
 
 interface FrontDeskViewProps {
   soundEnabled: boolean;
@@ -55,6 +58,7 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
   const [testRoom, setTestRoom] = useState('102');
   const [testCategory, setTestCategory] = useState<HotelRequest['category']>('Housekeeping');
   const [testMessage, setTestMessage] = useState('Fresh towels please');
+  const schedule = useServiceSchedule();
 
   // Load and subscribe to real-time events
   const loadRequests = () => {
@@ -250,11 +254,8 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
             </span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-bold font-serif-luxury text-[#F3EFEA]">
-            Front Desk Requests
+            Front Desk
           </h1>
-          <p className="text-xs sm:text-sm text-[#9E978C] mt-0.5">
-            Real-time feed of guest assistance requests across all rooms
-          </p>
         </div>
 
         {/* Quick Toolbar */}
@@ -263,10 +264,10 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
             <button
               type="button"
               onClick={requestNotificationPermission}
-              className="text-xs px-3 py-1.5 rounded-md bg-[#252320] hover:bg-[#322E29] border border-[#3D3830] text-[#D8D2C7] transition-colors flex items-center gap-1.5 focus-visible:ring-1 focus-visible:ring-[#C5A880]"
+              className="text-xs px-3 py-1.5 rounded-md bg-[#252320] hover:bg-[#322E29] border border-[#3D3830] text-[#D8D2C7] transition-colors flex items-center gap-1.5 focus-visible:ring-1 focus-visible:ring-[#C5A880] cursor-pointer"
             >
               <Bell className="w-3.5 h-3.5 text-[#C5A880]" />
-              <span>Enable Browser Alerts</span>
+              <span>Browser Alerts</span>
             </button>
           )}
 
@@ -280,7 +281,7 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
                 playConciergeBell();
               }
             }}
-            className="text-xs px-3 py-1.5 rounded-md bg-[#252320] hover:bg-[#322E29] border border-[#3D3830] text-[#D8D2C7] transition-colors flex items-center gap-1.5"
+            className="text-xs px-3 py-1.5 rounded-md bg-[#252320] hover:bg-[#322E29] border border-[#3D3830] text-[#D8D2C7] transition-colors flex items-center gap-1.5 cursor-pointer"
             title="Test concierge chime"
           >
             {soundEnabled ? <Volume2 className="w-3.5 h-3.5 text-[#C5A880]" /> : <VolumeX className="w-3.5 h-3.5 text-[#7E786E]" />}
@@ -290,7 +291,7 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
           <button
             type="button"
             onClick={() => setQuickTestModalOpen(true)}
-            className="text-xs px-3 py-1.5 rounded-md bg-[#C5A880] hover:bg-[#B39366] text-[#121110] font-bold transition-all flex items-center gap-1.5 shadow-sm"
+            className="text-xs px-3 py-1.5 rounded-md bg-[#C5A880] hover:bg-[#B39366] text-[#121110] font-bold transition-all flex items-center gap-1.5 shadow-sm cursor-pointer"
           >
             <Plus className="w-3.5 h-3.5" />
             <span>Simulate Request</span>
@@ -299,12 +300,50 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
           <button
             type="button"
             onClick={handleResetDemo}
-            className="text-xs px-3 py-1.5 rounded-md bg-[#1C1B18] hover:bg-[#252320] border border-[#33302A] text-[#9E978C] hover:text-[#F3EFEA] transition-colors flex items-center gap-1"
+            className="text-xs px-3 py-1.5 rounded-md bg-[#1C1B18] hover:bg-[#252320] border border-[#33302A] text-[#9E978C] hover:text-[#F3EFEA] transition-colors flex items-center gap-1 cursor-pointer"
             title="Reset to sample initial requests"
           >
             <RotateCcw className="w-3 h-3" />
             <span>Reset Demo</span>
           </button>
+        </div>
+      </div>
+
+      {/* Housekeeping & Concierge Duty Hours Strip */}
+      <div className={`border rounded-xl p-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs ${
+        schedule.isOffDuty 
+          ? 'bg-[#241A14] border-[#EAB308]/40 text-[#F3EFEA]' 
+          : 'bg-[#171614] border-[#2A2823] text-[#D8D2C7]'
+      }`}>
+        <div className="flex items-center gap-2.5">
+          {schedule.isOffDuty ? (
+            <div className="w-6 h-6 rounded bg-[#EAB308]/20 border border-[#EAB308]/40 flex items-center justify-center text-[#FDE047]">
+              <Moon className="w-3.5 h-3.5" />
+            </div>
+          ) : (
+            <div className="w-6 h-6 rounded bg-[#C5A880]/20 border border-[#C5A880]/40 flex items-center justify-center text-[#C5A880]">
+              <Sun className="w-3.5 h-3.5" />
+            </div>
+          )}
+          <div>
+            <span className="font-bold text-[#F3EFEA] block">
+              {schedule.isOffDuty ? 'Housekeeping & Concierge: Off Duty (10:00 PM – 6:00 AM)' : 'Housekeeping & Concierge: On Duty (6:00 AM – 10:00 PM)'}
+            </span>
+            <span className="text-[11px] text-[#A89F91]">
+              {schedule.isOffDuty ? 'Services resume at 6:00 AM' : 'Overnight off-duty begins at 10:00 PM'}
+            </span>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
+          <span className="text-[10px] uppercase font-semibold text-[#A89F91]">
+            {schedule.isOffDuty ? 'Resumes in:' : 'Shift ends in:'}
+          </span>
+          <span className={`font-mono font-bold text-xs px-2 py-0.5 rounded ${
+            schedule.isOffDuty ? 'bg-[#16120D] text-[#FDE047] border border-[#3A2E1F]' : 'bg-[#141311] text-[#C5A880] border border-[#2E2B25]'
+          }`}>
+            {schedule.formattedCountdown}
+          </span>
         </div>
       </div>
 

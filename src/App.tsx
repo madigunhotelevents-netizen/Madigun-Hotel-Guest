@@ -34,26 +34,78 @@ export default function App() {
   const [isLoginModalOpen, setIsLoginModalOpen] = useState<boolean>(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState<boolean>(false);
 
-  // Initialize room number and tab from URL
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const params = new URLSearchParams(window.location.search);
-      const roomParam = params.get('room');
-      const viewParam = params.get('view');
+  // Helper to extract room number and view mode from URL params, paths, and hashes
+  const parseUrlState = () => {
+    if (typeof window === 'undefined') return { room: '101', view: 'guest' };
 
-      if (roomParam) {
-        setRoomNumber(roomParam);
-        setActiveTab('guest');
-      } else if (viewParam === 'frontdesk' || viewParam === 'staff') {
-        setActiveTab('frontdesk');
-      } else if (viewParam === 'storage' || viewParam === 'drive' || viewParam === 'deploy') {
-        setActiveTab('storage');
-      } else if (viewParam === 'qr') {
-        setActiveTab('qr');
-      } else if (viewParam === 'accounts' || viewParam === 'employees') {
-        setActiveTab('accounts');
+    const searchParams = new URLSearchParams(window.location.search);
+    let detectedRoom = searchParams.get('room') || searchParams.get('r') || searchParams.get('rm');
+    const viewParam = searchParams.get('view');
+
+    // Check pathname patterns (e.g. /room/101, /rooms/204, /guest/305)
+    const pathname = window.location.pathname;
+    const pathMatch = pathname.match(/\/(?:room|rooms|guest|r)\/([^\/?#]+)/i);
+    if (!detectedRoom && pathMatch && pathMatch[1]) {
+      try {
+        detectedRoom = decodeURIComponent(pathMatch[1]);
+      } catch {
+        detectedRoom = pathMatch[1];
       }
     }
+
+    // Check hash patterns (e.g. #/room/101 or #room=101)
+    const hash = window.location.hash;
+    if (!detectedRoom && hash) {
+      const hashMatch = hash.match(/(?:room|r)=([^&#]+)/i) || hash.match(/#\/(?:room|guest)\/([^/?#]+)/i);
+      if (hashMatch && hashMatch[1]) {
+        try {
+          detectedRoom = decodeURIComponent(hashMatch[1]);
+        } catch {
+          detectedRoom = hashMatch[1];
+        }
+      }
+    }
+
+    // If a room parameter is detected in the URL, it is a guest scanning a QR code!
+    if (detectedRoom) {
+      localStorage.setItem('madigun_active_guest_room', detectedRoom);
+      return { room: detectedRoom, view: 'guest' as const };
+    }
+
+    // Staff explicit views
+    if (viewParam === 'frontdesk' || viewParam === 'staff') {
+      return { room: localStorage.getItem('madigun_active_guest_room') || '101', view: 'frontdesk' as const };
+    }
+    if (viewParam === 'storage' || viewParam === 'drive' || viewParam === 'deploy') {
+      return { room: localStorage.getItem('madigun_active_guest_room') || '101', view: 'storage' as const };
+    }
+    if (viewParam === 'qr') {
+      return { room: localStorage.getItem('madigun_active_guest_room') || '101', view: 'qr' as const };
+    }
+    if (viewParam === 'accounts' || viewParam === 'employees') {
+      return { room: localStorage.getItem('madigun_active_guest_room') || '101', view: 'accounts' as const };
+    }
+
+    // Default: Automatic Guest User Interface (No login required)
+    const savedGuestRoom = localStorage.getItem('madigun_active_guest_room') || '101';
+    return { room: savedGuestRoom, view: 'guest' as const };
+  };
+
+  // Initialize room number and tab from URL
+  useEffect(() => {
+    const { room, view } = parseUrlState();
+    setRoomNumber(room);
+    setActiveTab(view);
+
+    // Listen to popstate / history changes
+    const handlePopState = () => {
+      const parsed = parseUrlState();
+      setRoomNumber(parsed.room);
+      setActiveTab(parsed.view);
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
   // Update new requests counter & subscribe to alerts

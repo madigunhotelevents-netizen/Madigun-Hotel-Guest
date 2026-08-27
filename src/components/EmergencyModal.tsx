@@ -20,7 +20,7 @@ export const EmergencyModal: React.FC<EmergencyModalProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onConfirm(quickNote || 'Immediate assistance requested by guest');
+    onConfirm(quickNote || 'Emergency assistance requested');
   };
 
   return (
@@ -31,42 +31,36 @@ export const EmergencyModal: React.FC<EmergencyModalProps> = ({
         aria-modal="true"
         aria-labelledby="emergency-modal-title"
       >
-        {/* Top Warning Strip */}
-        <div className="flex items-start justify-between gap-3 mb-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-[#E63946]/20 border border-[#E63946] flex items-center justify-center text-[#E63946] shrink-0 animate-pulse">
-              <ShieldAlert className="w-6 h-6" />
+        {/* Header */}
+        <div className="flex items-center justify-between pb-3 border-b border-[#3D1E22] mb-3.5">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-[#E63946]/20 border border-[#E63946] flex items-center justify-center text-[#E63946] shrink-0 animate-pulse">
+              <ShieldAlert className="w-5 h-5" />
             </div>
-            <div>
-              <span className="text-xs font-semibold uppercase tracking-wider text-[#E63946]">High Priority Alert</span>
-              <h3 id="emergency-modal-title" className="text-lg sm:text-xl font-bold font-serif-luxury text-white">
-                EMERGENCY ASSISTANCE
-              </h3>
-            </div>
+            <h3 id="emergency-modal-title" className="text-base sm:text-lg font-bold font-serif-luxury text-white">
+              EMERGENCY ASSISTANCE
+            </h3>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="text-[#9E978C] hover:text-white p-1 rounded transition-colors focus-visible:ring-2 focus-visible:ring-[#E63946] focus-visible:outline-none"
+            className="text-[#9E978C] hover:text-white p-1 rounded transition-colors focus-visible:ring-2 focus-visible:ring-[#E63946] focus-visible:outline-none cursor-pointer"
             aria-label="Close dialog"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        <div className="bg-[#2A1618] border border-[#E63946]/30 rounded-lg p-3.5 mb-4">
-          <p className="text-sm font-semibold text-[#FFCCD5] mb-1">
-            Do you require immediate assistance from the Front Desk?
-          </p>
-          <p className="text-xs text-[#E0A8B0]">
-            Room <strong className="text-white font-mono text-sm">{roomNumber}</strong> — Hotel management and security will be dispatched immediately.
-          </p>
+        {/* Room Header Pill */}
+        <div className="bg-[#2A1618] border border-[#E63946]/40 rounded-lg px-3.5 py-2 mb-3.5 flex items-center justify-between text-xs">
+          <span className="text-[#FFCCD5] uppercase font-semibold">Room</span>
+          <span className="font-bold text-white font-mono text-sm">{roomNumber}</span>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-3.5">
           <div>
-            <label className="block text-xs font-medium text-[#B8B2A7] mb-1.5">
-              Quick description (Optional):
+            <label className="block text-xs font-semibold text-[#B8B2A7] mb-1.5 uppercase tracking-wide">
+              Select Issue:
             </label>
             <div className="flex flex-wrap gap-1.5 mb-2">
               {['Medical Need', 'Security / Lock Issue', 'Urgent Staff Help', 'Water Leak'].map((chip) => (
@@ -74,9 +68,9 @@ export const EmergencyModal: React.FC<EmergencyModalProps> = ({
                   key={chip}
                   type="button"
                   onClick={() => setQuickNote(chip)}
-                  className={`text-xs px-2.5 py-1 rounded transition-colors ${
+                  className={`text-xs px-2.5 py-1 rounded transition-colors cursor-pointer ${
                     quickNote === chip
-                      ? 'bg-[#E63946] text-white font-medium'
+                      ? 'bg-[#E63946] text-white font-semibold'
                       : 'bg-[#2A2723] text-[#D8D2C7] hover:bg-[#38342F] border border-[#3E3A34]'
                   }`}
                 >
@@ -88,25 +82,25 @@ export const EmergencyModal: React.FC<EmergencyModalProps> = ({
               type="text"
               value={quickNote}
               onChange={(e) => setQuickNote(e.target.value)}
-              placeholder="e.g. Please send staff immediately"
-              className="w-full bg-[#141311] border border-[#3E3A34] focus:border-[#E63946] focus:ring-1 focus:ring-[#E63946] rounded-md px-3 py-2 text-sm text-[#F3EFEA] placeholder-[#706B62] outline-none"
+              placeholder="Specify issue..."
+              className="w-full bg-[#141311] border border-[#3E3A34] focus:border-[#E63946] focus:ring-1 focus:ring-[#E63946] rounded-lg px-3 py-2 text-xs text-[#F3EFEA] placeholder-[#706B62] outline-none"
             />
           </div>
 
-          <div className="flex flex-col sm:flex-row gap-2.5 pt-2">
+          <div className="flex gap-2 pt-1">
             <button
               type="button"
               onClick={onClose}
-              className="w-full sm:w-1/2 py-2.5 px-4 rounded-md border border-[#443F37] text-sm font-medium text-[#D8D2C7] hover:bg-[#2A2723] transition-colors focus-visible:ring-2 focus-visible:ring-gray-400 focus-visible:outline-none"
+              className="w-1/3 py-2.5 px-3 rounded-lg border border-[#443F37] text-xs font-semibold text-[#D8D2C7] hover:bg-[#2A2723] transition-colors cursor-pointer"
             >
-              CANCEL
+              Cancel
             </button>
             <button
               type="submit"
-              className="w-full sm:w-1/2 py-2.5 px-4 rounded-md bg-[#E63946] hover:bg-[#D62828] text-white text-sm font-bold tracking-wide transition-all shadow-lg flex items-center justify-center gap-2 focus-visible:ring-2 focus-visible:ring-white focus-visible:outline-none cursor-pointer"
+              className="w-2/3 py-2.5 px-4 rounded-lg bg-[#E63946] hover:bg-[#D62828] text-white text-xs font-bold uppercase tracking-wider transition-all shadow-lg flex items-center justify-center gap-1.5 cursor-pointer"
             >
-              <AlertTriangle className="w-4 h-4" />
-              <span>REQUEST ASSISTANCE</span>
+              <AlertTriangle className="w-3.5 h-3.5" />
+              <span>Confirm Emergency</span>
             </button>
           </div>
         </form>

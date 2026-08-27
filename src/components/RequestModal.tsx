@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { X, Send, Check } from 'lucide-react';
+import { X, Send, Check, Moon } from 'lucide-react';
 import { CategoryInfo } from '../types/hotel';
+import { useServiceSchedule } from '../services/scheduleService';
 
 interface RequestModalProps {
   roomNumber: string;
@@ -19,6 +20,7 @@ export const RequestModal: React.FC<RequestModalProps> = ({
 }) => {
   const [message, setMessage] = useState('');
   const [selectedChips, setSelectedChips] = useState<string[]>([]);
+  const schedule = useServiceSchedule();
 
   useEffect(() => {
     if (isOpen) {
@@ -39,7 +41,6 @@ export const RequestModal: React.FC<RequestModalProps> = ({
     }
     setSelectedChips(updated);
 
-    // If chips selected, auto-combine into message if message is empty or chip-based
     if (updated.length > 0) {
       setMessage(updated.join(', '));
     } else {
@@ -56,54 +57,51 @@ export const RequestModal: React.FC<RequestModalProps> = ({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
       <div 
-        className="bg-[#1C1B18] border border-[#3D3830] rounded-xl max-w-lg w-full p-5 sm:p-7 shadow-2xl relative overflow-hidden"
+        className="bg-[#1C1B18] border border-[#3D3830] rounded-xl max-w-lg w-full p-5 sm:p-6 shadow-2xl relative overflow-hidden"
         role="dialog"
         aria-modal="true"
         aria-labelledby="request-modal-title"
       >
         {/* Header */}
-        <div className="flex items-center justify-between pb-4 border-b border-[#2C2A26] mb-5">
-          <div className="flex items-center gap-3">
-            <span className="text-2xl" role="img" aria-hidden="true">
+        <div className="flex items-center justify-between pb-3 border-b border-[#2C2A26] mb-4">
+          <div className="flex items-center gap-2.5">
+            <span className="text-xl" role="img" aria-hidden="true">
               {category.emoji}
             </span>
-            <div>
-              <span className="text-xs uppercase tracking-wider text-[#C5A880] font-semibold">
-                Guest Assistance Request
-              </span>
-              <h3 id="request-modal-title" className="text-lg sm:text-xl font-bold font-serif-luxury text-[#F3EFEA]">
-                {category.label}
-              </h3>
-            </div>
+            <h3 id="request-modal-title" className="text-lg font-bold font-serif-luxury text-[#F3EFEA]">
+              {category.label}
+            </h3>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="text-[#9E978C] hover:text-[#F3EFEA] p-1.5 rounded transition-colors focus-visible:ring-2 focus-visible:ring-[#C5A880] focus-visible:outline-none"
+            className="text-[#9E978C] hover:text-[#F3EFEA] p-1 rounded transition-colors focus-visible:ring-2 focus-visible:ring-[#C5A880] focus-visible:outline-none cursor-pointer"
             aria-label="Close"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Room & Service Details Info Card */}
-        <div className="bg-[#141311] border border-[#2E2B25] rounded-lg p-3.5 mb-4 grid grid-cols-2 gap-3 text-sm">
-          <div>
-            <span className="text-xs text-[#9E978C] block uppercase font-medium">Room Number</span>
-            <span className="font-bold text-[#F3EFEA] font-mono text-base">{roomNumber}</span>
-          </div>
-          <div>
-            <span className="text-xs text-[#9E978C] block uppercase font-medium">Service</span>
-            <span className="font-medium text-[#C5A880] truncate block">{category.label}</span>
-          </div>
+        {/* Room Header Pill */}
+        <div className="bg-[#141311] border border-[#2E2B25] rounded-lg px-3.5 py-2 mb-3.5 flex items-center justify-between text-xs">
+          <span className="text-[#9E978C] uppercase font-semibold">Room</span>
+          <span className="font-bold text-[#F3EFEA] font-mono text-sm">{roomNumber}</span>
         </div>
 
-        <form onSubmit={handleFormSubmit} className="space-y-4">
+        {/* Off-Duty Notice (if 10 PM - 6 AM) */}
+        {schedule.isOffDuty && (
+          <div className="bg-[#241A14] border border-[#EAB308]/40 rounded-lg p-2.5 mb-3.5 flex items-center gap-2 text-xs text-[#FDE047]">
+            <Moon className="w-4 h-4 shrink-0 text-[#FDE047]" />
+            <span>Off Duty (10:00 PM – 6:00 AM) • Request will be queued for 6:00 AM</span>
+          </div>
+        )}
+
+        <form onSubmit={handleFormSubmit} className="space-y-3.5">
           {/* Quick Option Pills */}
           {category.quickOptions && category.quickOptions.length > 0 && (
             <div>
-              <label className="block text-xs font-medium text-[#B8B2A7] mb-2">
-                Quick Select (Tap to include):
+              <label className="block text-xs font-semibold text-[#B8B2A7] mb-1.5 uppercase tracking-wide">
+                Select Option:
               </label>
               <div className="flex flex-wrap gap-1.5">
                 {category.quickOptions.map((opt) => {
@@ -113,7 +111,7 @@ export const RequestModal: React.FC<RequestModalProps> = ({
                       key={opt}
                       type="button"
                       onClick={() => toggleChip(opt)}
-                      className={`text-xs px-3 py-1.5 rounded-md transition-all flex items-center gap-1 focus-visible:ring-1 focus-visible:ring-[#C5A880] focus-visible:outline-none ${
+                      className={`text-xs px-2.5 py-1 rounded transition-all flex items-center gap-1 cursor-pointer focus-visible:ring-1 focus-visible:ring-[#C5A880] focus-visible:outline-none ${
                         isSelected
                           ? 'bg-[#C5A880] text-[#121110] font-semibold'
                           : 'bg-[#252320] text-[#D8D2C7] border border-[#38342E] hover:border-[#C5A880]/60'
@@ -128,41 +126,37 @@ export const RequestModal: React.FC<RequestModalProps> = ({
             </div>
           )}
 
-          {/* Additional Message Input */}
+          {/* Notes / Message */}
           <div>
-            <label htmlFor="additional-message-input" className="block text-xs font-medium text-[#B8B2A7] mb-1.5">
-              Additional Message {category.id === 'Other Request' ? '(Please specify)' : '(Optional)'}:
+            <label htmlFor="additional-message-input" className="block text-xs font-semibold text-[#B8B2A7] mb-1 uppercase tracking-wide">
+              Note {category.id === 'Other Request' ? '' : '(Optional)'}:
             </label>
             <textarea
               id="additional-message-input"
-              rows={3}
+              rows={2}
               value={message}
               onChange={(e) => setMessage(e.target.value)}
-              placeholder={
-                category.id === 'Other Request'
-                  ? 'Please describe how we can assist you...'
-                  : 'e.g. Please deliver around 2:00 PM, or specific preferences...'
-              }
+              placeholder="Add details..."
               required={category.id === 'Other Request'}
-              className="w-full bg-[#141311] border border-[#38342E] focus:border-[#C5A880] focus:ring-1 focus:ring-[#C5A880] rounded-lg px-3 py-2.5 text-sm text-[#F3EFEA] placeholder-[#706B62] outline-none resize-none transition-colors"
+              className="w-full bg-[#141311] border border-[#38342E] focus:border-[#C5A880] rounded-lg px-3 py-2 text-xs text-[#F3EFEA] placeholder-[#706B62] outline-none resize-none transition-colors font-sans"
             />
           </div>
 
           {/* Actions */}
-          <div className="pt-2 flex flex-col sm:flex-row gap-2.5">
+          <div className="pt-1 flex gap-2">
             <button
               type="button"
               onClick={onClose}
-              className="w-full sm:w-1/3 py-3 px-4 rounded-lg border border-[#3D3830] text-sm font-medium text-[#D8D2C7] hover:bg-[#252320] transition-colors focus-visible:ring-2 focus-visible:ring-gray-400 focus-visible:outline-none cursor-pointer"
+              className="w-1/3 py-2.5 px-3 rounded-lg border border-[#3D3830] text-xs font-semibold text-[#D8D2C7] hover:bg-[#252320] transition-colors cursor-pointer"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="w-full sm:w-2/3 py-3 px-5 rounded-lg bg-[#C5A880] hover:bg-[#B39366] text-[#121110] text-sm font-bold tracking-wide transition-all shadow-md flex items-center justify-center gap-2 focus-visible:ring-2 focus-visible:ring-[#F3EFEA] focus-visible:outline-none cursor-pointer"
+              className="w-2/3 py-2.5 px-4 rounded-lg bg-[#C5A880] hover:bg-[#B39366] text-[#121110] text-xs font-bold uppercase tracking-wider transition-all shadow-md flex items-center justify-center gap-1.5 cursor-pointer"
             >
-              <Send className="w-4 h-4" />
-              <span>SEND REQUEST</span>
+              <Send className="w-3.5 h-3.5" />
+              <span>Submit</span>
             </button>
           </div>
         </form>

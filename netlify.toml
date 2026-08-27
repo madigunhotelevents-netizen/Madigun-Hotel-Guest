@@ -1,9 +1,38 @@
-/* Netlify configuration for Single Page Application routing */
+# Netlify Configuration for Madigun Hotel & Events
+[build]
+  publish = "dist"
+  command = "npm run build"
+
+# Direct clean room path rewrites (e.g. /room/101 -> /index.html?room=101)
+[[redirects]]
+  from = "/room/*"
+  to = "/index.html?room=:splat"
+  status = 200
+
+[[redirects]]
+  from = "/rooms/*"
+  to = "/index.html?room=:splat"
+  status = 200
+
+[[redirects]]
+  from = "/guest"
+  to = "/index.html"
+  status = 200
+
+[[redirects]]
+  from = "/guest/*"
+  to = "/index.html?room=:splat"
+  status = 200
+
+# Universal Single Page Application routing fallback
 [[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200
 
-[build]
-  publish = "dist"
-  command = "npm run build"
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "ALLOWALL"
+    Access-Control-Allow-Origin = "*"
+

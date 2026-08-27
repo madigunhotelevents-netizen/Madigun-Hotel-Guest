@@ -52,13 +52,13 @@ export const ConfirmationView: React.FC<ConfirmationViewProps> = ({
         </div>
 
         {/* Heading */}
-        <h2 className="text-xl sm:text-2xl font-bold font-serif-luxury text-[#F3EFEA] mb-1">
-          Request Sent Successfully
+        <h2 className="text-lg sm:text-xl font-bold font-serif-luxury text-[#F3EFEA] mb-1">
+          Request Sent
         </h2>
 
         {/* Room Display */}
-        <div className="my-3">
-          <span className="text-xs uppercase tracking-widest text-[#B8B2A7] font-medium block">
+        <div className="my-2.5">
+          <span className="text-xs uppercase tracking-widest text-[#B8B2A7] font-semibold block">
             Room
           </span>
           <span className="text-2xl font-bold font-mono text-[#C5A880]">
@@ -66,21 +66,16 @@ export const ConfirmationView: React.FC<ConfirmationViewProps> = ({
           </span>
         </div>
 
-        {/* Description */}
-        <p className="text-sm sm:text-base text-[#D8D2C7] leading-relaxed mb-6 px-2">
-          "Your request has been received by the Front Desk. Our staff will assist you shortly."
-        </p>
-
         {/* Live Status Tracker Card */}
-        <div className="bg-[#141311] border border-[#2A2823] rounded-xl p-4 text-left mb-6 space-y-2.5">
+        <div className="bg-[#141311] border border-[#2A2823] rounded-xl p-3.5 text-left mb-5 space-y-2">
           <div className="flex items-center justify-between">
-            <span className="text-xs text-[#9E978C] uppercase font-medium">Status</span>
+            <span className="text-xs text-[#9E978C] uppercase font-semibold">Status</span>
             {getStatusBadge(request.status)}
           </div>
 
           <div className="flex items-start justify-between gap-2 border-t border-[#23211D] pt-2 text-xs">
             <span className="text-[#9E978C]">Request:</span>
-            <span className="font-medium text-[#F3EFEA] text-right">{request.category}</span>
+            <span className="font-semibold text-[#F3EFEA] text-right">{request.category}</span>
           </div>
 
           {request.additionalMessage && (
@@ -102,11 +97,11 @@ export const ConfirmationView: React.FC<ConfirmationViewProps> = ({
         </div>
 
         {/* Main Action: BACK TO HOME */}
-        <div className="space-y-2.5">
+        <div className="space-y-2">
           <button
             type="button"
             onClick={onBackToHome}
-            className="w-full py-3.5 px-6 rounded-xl bg-[#C5A880] hover:bg-[#B39366] text-[#121110] font-bold text-sm tracking-wider uppercase transition-all shadow-md flex items-center justify-center gap-2 focus-visible:ring-2 focus-visible:ring-[#F3EFEA] focus-visible:outline-none cursor-pointer"
+            className="w-full py-3 px-5 rounded-xl bg-[#C5A880] hover:bg-[#B39366] text-[#121110] font-bold text-xs tracking-wider uppercase transition-all shadow-md flex items-center justify-center gap-2 focus-visible:ring-2 focus-visible:ring-[#F3EFEA] focus-visible:outline-none cursor-pointer"
           >
             <ArrowLeft className="w-4 h-4" />
             <span>BACK TO HOME</span>
@@ -115,7 +110,7 @@ export const ConfirmationView: React.FC<ConfirmationViewProps> = ({
           <button
             type="button"
             onClick={onNewRequest}
-            className="w-full py-2.5 px-4 rounded-xl border border-[#38342E] text-[#B8B2A7] hover:text-[#F3EFEA] hover:bg-[#252320] text-xs font-medium transition-colors focus-visible:ring-2 focus-visible:ring-gray-400 focus-visible:outline-none"
+            className="w-full py-2.5 px-4 rounded-xl border border-[#38342E] text-[#B8B2A7] hover:text-[#F3EFEA] hover:bg-[#252320] text-xs font-semibold transition-colors cursor-pointer"
           >
             Send Another Request
           </button>

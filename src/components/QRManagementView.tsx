@@ -29,6 +29,12 @@ export const QRManagementView: React.FC<QRManagementViewProps> = ({ onTestRoom }
   const [rooms, setRooms] = useState<string[]>(DEFAULT_ROOMS);
   const [selectedRoom, setSelectedRoom] = useState<string>('101');
   const [newRoomInput, setNewRoomInput] = useState('');
+  const [customDomain, setCustomDomain] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('madigun_qr_custom_domain') || window.location.origin;
+    }
+    return 'https://madigun-hotel.netlify.app';
+  });
   const [qrDataUrl, setQrDataUrl] = useState<string>('');
   const [allQrUrls, setAllQrUrls] = useState<{ [room: string]: string }>({});
   const [copiedRoom, setCopiedRoom] = useState<string | null>(null);
@@ -37,9 +43,17 @@ export const QRManagementView: React.FC<QRManagementViewProps> = ({ onTestRoom }
 
   // Generate Base URL for the QR code
   const getRoomUrl = (room: string) => {
-    if (typeof window === 'undefined') return `https://madigunhotel.com/?room=${encodeURIComponent(room)}`;
-    const base = window.location.origin + window.location.pathname;
-    return `${base}?room=${encodeURIComponent(room)}`;
+    const rawBase = customDomain.trim() || (typeof window !== 'undefined' ? window.location.origin : 'https://madigun-hotel.netlify.app');
+    // Strip trailing slash
+    const base = rawBase.replace(/\/+$/, '');
+    return `${base}/?room=${encodeURIComponent(room)}`;
+  };
+
+  const handleDomainChange = (val: string) => {
+    setCustomDomain(val);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('madigun_qr_custom_domain', val);
+    }
   };
 
   // Generate QR code for currently selected room
@@ -55,7 +69,7 @@ export const QRManagementView: React.FC<QRManagementViewProps> = ({ onTestRoom }
     })
       .then((data) => setQrDataUrl(data))
       .catch((err) => console.error('Error generating QR code:', err));
-  }, [selectedRoom]);
+  }, [selectedRoom, customDomain]);
 
   // Pre-generate QR codes for all rooms for batch printing
   useEffect(() => {
@@ -80,7 +94,7 @@ export const QRManagementView: React.FC<QRManagementViewProps> = ({ onTestRoom }
       setAllQrUrls(mapping);
     };
     generateAll();
-  }, [rooms]);
+  }, [rooms, customDomain]);
 
   const handleAddRoom = (e: React.FormEvent) => {
     e.preventDefault();
@@ -169,6 +183,32 @@ export const QRManagementView: React.FC<QRManagementViewProps> = ({ onTestRoom }
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 no-print">
         {/* Left Column: Room List & Add Room (5 cols) */}
         <div className="lg:col-span-5 space-y-4">
+          {/* Target Host / Netlify Domain Config */}
+          <div className="bg-[#191815] border border-[#2D2A24] rounded-xl p-4 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-semibold uppercase tracking-wider text-[#C5A880] block">
+                QR Target Domain (Netlify / Custom)
+              </label>
+              <button
+                type="button"
+                onClick={() => handleDomainChange(window.location.origin)}
+                className="text-[10px] text-[#A8A196] hover:text-[#C5A880] underline cursor-pointer"
+              >
+                Use Current Origin
+              </button>
+            </div>
+            <input
+              type="text"
+              value={customDomain}
+              onChange={(e) => handleDomainChange(e.target.value)}
+              placeholder="e.g. https://madigun-hotel.netlify.app"
+              className="w-full bg-[#141311] border border-[#38342E] focus:border-[#C5A880] rounded-lg px-3 py-2 text-xs text-[#F3EFEA] font-mono outline-none"
+            />
+            <p className="text-[11px] text-[#8E877C] leading-tight">
+              Printed cards embed this URL. Guests scanning this will open the Guest UI directly with <strong className="text-[#86EFAC]">zero login or account required</strong>.
+            </p>
+          </div>
+
           {/* Add Room Form */}
           <form onSubmit={handleAddRoom} className="bg-[#191815] border border-[#2D2A24] rounded-xl p-4 space-y-3">
             <h3 className="text-xs font-semibold uppercase tracking-wider text-[#B8B2A7]">
@@ -184,7 +224,7 @@ export const QRManagementView: React.FC<QRManagementViewProps> = ({ onTestRoom }
               />
               <button
                 type="submit"
-                className="px-3 py-2 bg-[#C5A880] hover:bg-[#B39366] text-[#121110] text-xs font-bold rounded-lg transition-colors flex items-center gap-1 shrink-0"
+                className="px-3 py-2 bg-[#C5A880] hover:bg-[#B39366] text-[#121110] text-xs font-bold rounded-lg transition-colors flex items-center gap-1 shrink-0 cursor-pointer"
               >
                 <Plus className="w-3.5 h-3.5" />
                 <span>Add</span>
@@ -201,7 +241,7 @@ export const QRManagementView: React.FC<QRManagementViewProps> = ({ onTestRoom }
               <span className="text-[11px] text-[#7A756D]">Click to preview</span>
             </div>
 
-            <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 max-h-[420px] overflow-y-auto pr-1 scrollbar-thin">
+            <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 max-h-[380px] overflow-y-auto pr-1 scrollbar-thin">
               {rooms.map((room) => {
                 const isSelected = selectedRoom === room;
                 return (
@@ -326,9 +366,11 @@ export const QRManagementView: React.FC<QRManagementViewProps> = ({ onTestRoom }
                   <p className="text-[11px] text-[#555048] leading-tight max-w-[240px] mx-auto">
                     Open your smartphone camera and point at this code for 24/7 Front Desk, Housekeeping &amp; Services.
                   </p>
-                  <span className="inline-block text-[9px] font-semibold text-[#8C7A63] uppercase tracking-wider bg-[#F3EFEA] px-2 py-0.5 rounded-full mt-1">
-                    No App Download Required
-                  </span>
+                  <div className="flex flex-col items-center gap-1 mt-1">
+                    <span className="inline-block text-[9px] font-bold text-[#14532D] bg-[#DCFCE7] border border-[#86EFAC] px-2.5 py-0.5 rounded-full uppercase tracking-wider">
+                      ✓ Instant Guest Access • No Login Required
+                    </span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -339,7 +381,7 @@ export const QRManagementView: React.FC<QRManagementViewProps> = ({ onTestRoom }
               <button
                 type="button"
                 onClick={() => handlePrint('single')}
-                className="text-[#C5A880] hover:underline flex items-center gap-1 font-semibold"
+                className="text-[#C5A880] hover:underline flex items-center gap-1 font-semibold cursor-pointer"
               >
                 <Printer className="w-3.5 h-3.5" />
                 <span>Ready to print</span>
@@ -391,8 +433,8 @@ export const QRManagementView: React.FC<QRManagementViewProps> = ({ onTestRoom }
                 <p className="text-xs text-gray-700 leading-normal">
                   Open phone camera to contact Front Desk, Housekeeping, Amenities &amp; Maintenance.
                 </p>
-                <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
-                  No App Download Required • 24/7 Digital Concierge
+                <p className="text-[10px] font-bold text-black uppercase tracking-wider bg-gray-100 py-1 px-2 rounded">
+                  Instant Guest Access • No Login or App Download Required
                 </p>
               </div>
             </div>
@@ -423,6 +465,9 @@ export const QRManagementView: React.FC<QRManagementViewProps> = ({ onTestRoom }
                 <p className="text-xs font-bold uppercase">Scan For In-Room Services</p>
                 <p className="text-[10px] text-gray-600">
                   Front Desk • Housekeeping • Towels &amp; Pillows • 24/7 Assistance
+                </p>
+                <p className="text-[9px] font-semibold text-gray-500 uppercase">
+                  No Login Required
                 </p>
               </div>
             ))}
