@@ -1,5 +1,5 @@
 import React from 'react';
-import { CheckCircle2, Clock, ArrowLeft, ShieldAlert, PhoneCall } from 'lucide-react';
+import { CheckCircle2, Clock, ArrowLeft, ShieldAlert } from 'lucide-react';
 import { HotelRequest } from '../types/hotel';
 
 interface ConfirmationViewProps {
@@ -114,12 +114,6 @@ export const ConfirmationView: React.FC<ConfirmationViewProps> = ({
           >
             Send Another Request
           </button>
-        </div>
-
-        {/* Footer info */}
-        <div className="mt-6 pt-4 border-t border-[#282622] text-xs text-[#7E786E] flex items-center justify-center gap-2">
-          <PhoneCall className="w-3.5 h-3.5 text-[#C5A880]" />
-          <span>Front Desk Direct: Dial <strong>0</strong> on room phone</span>
         </div>
       </div>
     </div>

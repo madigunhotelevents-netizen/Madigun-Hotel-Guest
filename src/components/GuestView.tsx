@@ -26,21 +26,18 @@ import { useServiceSchedule } from '../services/scheduleService';
 
 interface GuestViewProps {
   roomNumber: string;
-  setRoomNumber: (room: string) => void;
+  setRoomNumber?: (room: string) => void;
   soundEnabled: boolean;
 }
 
 export const GuestView: React.FC<GuestViewProps> = ({
   roomNumber,
-  setRoomNumber,
   soundEnabled,
 }) => {
   const [selectedCategory, setSelectedCategory] = useState<CategoryInfo | null>(null);
   const [isRequestModalOpen, setIsRequestModalOpen] = useState(false);
   const [isEmergencyModalOpen, setIsEmergencyModalOpen] = useState(false);
   const [activeConfirmation, setActiveConfirmation] = useState<HotelRequest | null>(null);
-  const [isEditingRoom, setIsEditingRoom] = useState(false);
-  const [tempRoomInput, setTempRoomInput] = useState(roomNumber);
   const [roomRequests, setRoomRequests] = useState<HotelRequest[]>([]);
 
   const schedule = useServiceSchedule();
@@ -144,53 +141,15 @@ export const GuestView: React.FC<GuestViewProps> = ({
     <div className="max-w-2xl mx-auto px-4 py-6 sm:py-8 space-y-5">
       {/* Top Banner / Room Header */}
       <div className="text-center space-y-2">
-        {/* Room Identification Pill */}
-        <div className="inline-flex items-center gap-2 bg-[#1E1C19] border border-[#33302A] rounded-full px-3.5 py-1.5 shadow-sm">
+        {/* Fixed Room Identification Pill (Locked to QR Code) */}
+        <div className="inline-flex items-center gap-2 bg-[#1E1C19] border border-[#33302A] rounded-full px-4 py-1.5 shadow-sm">
           <DoorClosed className="w-3.5 h-3.5 text-[#C5A880]" />
           <span className="text-xs text-[#9E978C] uppercase tracking-wider font-semibold">
             Room:
           </span>
-          {isEditingRoom ? (
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                if (tempRoomInput.trim()) {
-                  setRoomNumber(tempRoomInput.trim());
-                  const url = new URL(window.location.href);
-                  url.searchParams.set('room', tempRoomInput.trim());
-                  window.history.replaceState({}, '', url.toString());
-                }
-                setIsEditingRoom(false);
-              }}
-              className="flex items-center gap-1"
-            >
-              <input
-                type="text"
-                value={tempRoomInput}
-                onChange={(e) => setTempRoomInput(e.target.value)}
-                autoFocus
-                className="w-16 bg-[#141311] border border-[#C5A880] rounded px-1.5 py-0.5 text-xs text-[#F3EFEA] font-mono outline-none text-center font-bold"
-              />
-              <button
-                type="submit"
-                className="text-[11px] bg-[#C5A880] text-[#121110] px-2 py-0.5 rounded font-bold cursor-pointer"
-              >
-                Save
-              </button>
-            </form>
-          ) : (
-            <button
-              type="button"
-              onClick={() => {
-                setTempRoomInput(roomNumber);
-                setIsEditingRoom(true);
-              }}
-              className="text-xs font-bold text-[#F3EFEA] font-mono hover:text-[#C5A880] transition-colors underline decoration-dotted underline-offset-2 cursor-pointer"
-              title="Click to change room number"
-            >
-              Room {roomNumber}
-            </button>
-          )}
+          <span className="text-xs font-bold text-[#C5A880] font-mono tracking-wide">
+            {roomNumber}
+          </span>
         </div>
 
         <h1 className="text-2xl sm:text-3xl font-bold font-serif-luxury tracking-wide text-[#F3EFEA] pt-1">

@@ -135,24 +135,34 @@ async function startServer() {
 
   // Create new request
   app.post('/api/requests', (req, res) => {
-    const { roomNumber, category, additionalMessage, isEmergency } = req.body;
+    const { roomNumber, category, additionalMessage, isEmergency, id, createdAt } = req.body;
     
     if (!roomNumber || !category) {
       res.status(400).json({ error: 'roomNumber and category are required' });
       return;
     }
 
+    const reqId = (id && typeof id === 'string' && id.trim())
+      ? id.trim()
+      : `req-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+
     const newRequest: HotelRequest = {
-      id: `req-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      id: reqId,
       roomNumber: String(roomNumber).trim(),
       category: String(category).trim(),
       additionalMessage: additionalMessage ? String(additionalMessage).trim() : '',
       status: 'NEW',
       isEmergency: Boolean(isEmergency) || category === 'Emergency Assistance',
-      createdAt: Date.now(),
+      createdAt: typeof createdAt === 'number' ? createdAt : Date.now(),
     };
 
-    inMemoryRequests = [newRequest, ...inMemoryRequests];
+    // Prevent duplicate ID insertion
+    const existingIndex = inMemoryRequests.findIndex((r) => r.id === reqId);
+    if (existingIndex >= 0) {
+      inMemoryRequests[existingIndex] = { ...inMemoryRequests[existingIndex], ...newRequest };
+    } else {
+      inMemoryRequests = [newRequest, ...inMemoryRequests];
+    }
     saveRequestsToFile(inMemoryRequests);
 
     broadcastSSE({
@@ -161,8 +171,34 @@ async function startServer() {
       timestamp: Date.now(),
     });
 
-    console.log(`[New Request] Room ${newRequest.roomNumber} - ${newRequest.category}`);
+    console.log(`[New Request] Room ${newRequest.roomNumber} - ${newRequest.category} (ID: ${newRequest.id})`);
     res.status(201).json(newRequest);
+  });
+
+  // Sync / bulk update requests from client
+  app.post('/api/requests/sync', (req, res) => {
+    const { requests } = req.body;
+    if (Array.isArray(requests)) {
+      // Merge requests
+      const mergedMap = new Map<string, HotelRequest>();
+      // First put incoming
+      requests.forEach((r) => {
+        if (r && r.id) mergedMap.set(r.id, r);
+      });
+      // Merge with existing
+      inMemoryRequests.forEach((r) => {
+        if (!mergedMap.has(r.id)) {
+          mergedMap.set(r.id, r);
+        }
+      });
+      inMemoryRequests = Array.from(mergedMap.values()).sort((a, b) => b.createdAt - a.createdAt);
+      saveRequestsToFile(inMemoryRequests);
+      broadcastSSE({
+        type: 'REQUESTS_UPDATED',
+        timestamp: Date.now(),
+      });
+    }
+    res.json(inMemoryRequests);
   });
 
   // Update request status

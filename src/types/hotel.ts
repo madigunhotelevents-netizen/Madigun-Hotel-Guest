@@ -68,7 +68,7 @@ export const CATEGORIES_CONFIG: CategoryInfo[] = [
     emoji: '🛎️',
     iconName: 'Bell',
     description: 'Speak with our front desk concierge or request general information',
-    quickOptions: ['Please call room phone', 'Need wake-up call', 'Question about checkout', 'Taxi reservation'],
+    quickOptions: ['Send staff to room', 'Need wake-up call', 'Question about checkout', 'Taxi reservation'],
   },
   {
     id: 'Housekeeping',

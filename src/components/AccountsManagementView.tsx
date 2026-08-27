@@ -19,6 +19,7 @@ import {
   Layers,
   Activity,
   Trash2,
+  Cloud,
 } from 'lucide-react';
 import { UserProfile, DutyStatus, UserRole } from '../types/hotel';
 import {
@@ -35,10 +36,12 @@ import { ProfileModal } from './ProfileModal';
 
 interface AccountsManagementViewProps {
   onOpenLoginModal: () => void;
+  onOpenGoogleDrive?: () => void;
 }
 
 export const AccountsManagementView: React.FC<AccountsManagementViewProps> = ({
   onOpenLoginModal,
+  onOpenGoogleDrive,
 }) => {
   const [accounts, setAccounts] = useState<UserProfile[]>([]);
   const [currentUser, setCurrentUserState] = useState<UserProfile | null>(null);
@@ -146,6 +149,18 @@ export const AccountsManagementView: React.FC<AccountsManagementViewProps> = ({
 
         {/* Header Actions */}
         <div className="flex items-center gap-2 flex-wrap">
+          {onOpenGoogleDrive && (
+            <button
+              type="button"
+              onClick={onOpenGoogleDrive}
+              className="text-xs px-3.5 py-2 rounded-lg bg-[#24211D] hover:bg-[#302B25] border border-[#3E3A33] hover:border-[#C5A880]/50 text-[#D8D2C7] hover:text-[#F3EFEA] font-semibold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
+              title="Google Drive Cloud Backups"
+            >
+              <Cloud className="w-4 h-4 text-[#C5A880]" />
+              <span>Google Drive</span>
+            </button>
+          )}
+
           {isDeveloper ? (
             <button
               type="button"

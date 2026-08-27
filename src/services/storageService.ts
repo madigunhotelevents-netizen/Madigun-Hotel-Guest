@@ -100,20 +100,20 @@ export async function fetchRequestsFromServer(): Promise<HotelRequest[]> {
   try {
     const res = await fetch('/api/requests', {
       headers: { 'Accept': 'application/json' },
+      cache: 'no-store',
     });
     if (res.ok) {
       const serverData = await res.json();
       if (Array.isArray(serverData)) {
-        const previousLength = inMemoryCache.length;
-        const previousLatest = inMemoryCache[0]?.id;
-        inMemoryCache = serverData;
-        isInitialFetchDone = true;
-        try {
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(serverData));
-        } catch {}
+        const prevJson = JSON.stringify(inMemoryCache);
+        const newJson = JSON.stringify(serverData);
+        if (prevJson !== newJson || !isInitialFetchDone) {
+          inMemoryCache = serverData;
+          isInitialFetchDone = true;
+          try {
+            localStorage.setItem(STORAGE_KEY, newJson);
+          } catch {}
 
-        // If data changed, notify listeners
-        if (serverData.length !== previousLength || (serverData[0] && serverData[0].id !== previousLatest)) {
           notifyListeners({ type: 'REQUESTS_UPDATED' });
         }
         return serverData;
@@ -200,17 +200,24 @@ export function createNewRequest(
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
+      id: newRequest.id,
       roomNumber: cleanRoom,
       category: cleanCategory,
       additionalMessage: cleanMsg,
       isEmergency: cleanEmergency,
+      createdAt: newRequest.createdAt,
     }),
   })
     .then(async (res) => {
       if (res.ok) {
         const savedServerReq: HotelRequest = await res.json();
-        // Replace temporary local ID with server ID if different
-        inMemoryCache = inMemoryCache.map((r) => (r.id === newRequest.id ? savedServerReq : r));
+        // Ensure cache matches server response
+        const existingIdx = inMemoryCache.findIndex((r) => r.id === savedServerReq.id || r.id === newRequest.id);
+        if (existingIdx >= 0) {
+          inMemoryCache[existingIdx] = savedServerReq;
+        } else {
+          inMemoryCache = [savedServerReq, ...inMemoryCache];
+        }
         try {
           localStorage.setItem(STORAGE_KEY, JSON.stringify(inMemoryCache));
         } catch {}
@@ -302,15 +309,23 @@ function setupServerEvents() {
       try {
         const data = JSON.parse(event.data);
         if (data.type === 'NEW_REQUEST_SUBMITTED' && data.request) {
-          // Add if not already present
-          if (!inMemoryCache.some((r) => r.id === data.request.id)) {
+          // Merge or add request to inMemoryCache
+          const existsIdx = inMemoryCache.findIndex((r) => r.id === data.request.id);
+          if (existsIdx >= 0) {
+            inMemoryCache[existsIdx] = data.request;
+          } else {
             inMemoryCache = [data.request, ...inMemoryCache];
-            try {
-              localStorage.setItem(STORAGE_KEY, JSON.stringify(inMemoryCache));
-            } catch {}
           }
+          try {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(inMemoryCache));
+          } catch {}
           notifyListeners({ type: 'NEW_REQUEST_SUBMITTED', request: data.request });
-        } else if (data.type === 'REQUEST_UPDATED' || data.type === 'REQUEST_DELETED' || data.type === 'REQUESTS_RESET') {
+        } else if (
+          data.type === 'REQUEST_UPDATED' ||
+          data.type === 'REQUEST_DELETED' ||
+          data.type === 'REQUESTS_RESET' ||
+          data.type === 'REQUESTS_UPDATED'
+        ) {
           fetchRequestsFromServer().then(() => {
             notifyListeners({ type: 'REQUESTS_UPDATED' });
           });
@@ -325,11 +340,11 @@ function setupServerEvents() {
         activeEventSource.close();
         activeEventSource = null;
       }
-      // Retry in 4 seconds
+      // Retry in 2 seconds
       clearTimeout(sseReconnectTimer);
       sseReconnectTimer = setTimeout(() => {
         setupServerEvents();
-      }, 4000);
+      }, 2000);
     };
   } catch (err) {
     console.warn('Could not initialize SSE EventSource:', err);
@@ -355,10 +370,13 @@ export function subscribeToRequestEvents(
   };
   window.addEventListener('storage', handleStorage);
 
-  // Background sync poll (every 2.5 seconds) to ensure 100% guarantee across mobile / desktop
+  // Immediate fetch from server
+  fetchRequestsFromServer().catch(() => {});
+
+  // Background sync poll (every 1.5s) to guarantee real-time cross-device sync
   const pollInterval = setInterval(() => {
     fetchRequestsFromServer();
-  }, 2500);
+  }, 1500);
 
   return () => {
     eventListeners.delete(callback);

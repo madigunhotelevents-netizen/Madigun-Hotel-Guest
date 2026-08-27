@@ -8,19 +8,18 @@ import {
   Users,
   User,
   Crown,
-  Shield,
   LogOut,
   ChevronDown,
-  Activity,
   LogIn,
   KeyRound,
   Cloud,
 } from 'lucide-react';
 import { UserProfile, DutyStatus } from '../types/hotel';
+import { getDriveStatus } from '../services/googleDriveService';
 
 interface HeaderProps {
-  activeTab: 'guest' | 'frontdesk' | 'qr' | 'accounts' | 'storage';
-  setActiveTab: (tab: 'guest' | 'frontdesk' | 'qr' | 'accounts' | 'storage') => void;
+  activeTab: 'guest' | 'frontdesk' | 'qr' | 'accounts';
+  setActiveTab: (tab: 'guest' | 'frontdesk' | 'qr' | 'accounts') => void;
   newRequestsCount: number;
   soundEnabled: boolean;
   setSoundEnabled: (enabled: boolean) => void;
@@ -30,6 +29,7 @@ interface HeaderProps {
   onOpenProfile: () => void;
   onLogout: () => void;
   onSetDutyStatus: (status: DutyStatus) => void;
+  onOpenGoogleDrive?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -44,9 +44,11 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenProfile,
   onLogout,
   onSetDutyStatus,
+  onOpenGoogleDrive,
 }) => {
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const driveStatus = getDriveStatus();
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -131,20 +133,6 @@ export const Header: React.FC<HeaderProps> = ({
 
           <button
             type="button"
-            onClick={() => setActiveTab('storage')}
-            className={`whitespace-nowrap shrink-0 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-[#C5A880] focus-visible:outline-none cursor-pointer ${
-              activeTab === 'storage'
-                ? 'bg-[#C5A880] text-[#121110] font-semibold shadow-sm'
-                : 'text-[#B8B2A7] hover:text-[#F3EFEA] hover:bg-[#262421]'
-            }`}
-          >
-            <Cloud className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Drive &amp; Deploy</span>
-            <span className="sm:hidden">Drive</span>
-          </button>
-
-          <button
-            type="button"
             onClick={() => setActiveTab('qr')}
             className={`whitespace-nowrap shrink-0 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-[#C5A880] focus-visible:outline-none cursor-pointer ${
               activeTab === 'qr'
@@ -158,8 +146,23 @@ export const Header: React.FC<HeaderProps> = ({
           </button>
         </nav>
 
-        {/* Zone 3: User Profile & Sound Actions */}
+        {/* Zone 3: User Profile, Google Drive & Sound Actions */}
         <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+          {/* Google Drive Quick Action Button */}
+          {onOpenGoogleDrive && (
+            <button
+              type="button"
+              onClick={onOpenGoogleDrive}
+              title={driveStatus.connected ? `Google Drive Connected (${driveStatus.userEmail || 'Active'})` : 'Connect Google Drive'}
+              className="p-1.5 sm:px-2.5 sm:py-1.5 rounded-lg border border-[#2C2A26] bg-[#1E1D1A] text-[#B8B2A7] hover:text-[#F3EFEA] hover:border-[#C5A880]/50 transition-all flex items-center gap-1.5 cursor-pointer text-xs"
+            >
+              <Cloud className={`w-3.5 h-3.5 ${driveStatus.connected ? 'text-[#22C55E]' : 'text-[#C5A880]'}`} />
+              <span className="hidden md:inline font-medium">
+                {driveStatus.connected ? 'Drive Synced' : 'Google Drive'}
+              </span>
+            </button>
+          )}
+
           {/* Sound Toggle */}
           <button
             type="button"
@@ -254,7 +257,7 @@ export const Header: React.FC<HeaderProps> = ({
                       <button
                         type="button"
                         onClick={() => onSetDutyStatus('ON_DUTY')}
-                        className={`py-1 rounded text-[10px] font-semibold border transition-all ${
+                        className={`py-1 rounded text-[10px] font-semibold border transition-all cursor-pointer ${
                           currentUser.dutyStatus === 'ON_DUTY'
                             ? 'bg-[#22C55E]/20 text-[#86EFAC] border-[#22C55E]/50'
                             : 'bg-[#141311] text-[#8E877C] border-[#2A2824] hover:text-[#F3EFEA]'
@@ -265,7 +268,7 @@ export const Header: React.FC<HeaderProps> = ({
                       <button
                         type="button"
                         onClick={() => onSetDutyStatus('ON_BREAK')}
-                        className={`py-1 rounded text-[10px] font-semibold border transition-all ${
+                        className={`py-1 rounded text-[10px] font-semibold border transition-all cursor-pointer ${
                           currentUser.dutyStatus === 'ON_BREAK'
                             ? 'bg-[#EAB308]/20 text-[#FDE047] border-[#EAB308]/50'
                             : 'bg-[#141311] text-[#8E877C] border-[#2A2824] hover:text-[#F3EFEA]'
@@ -276,7 +279,7 @@ export const Header: React.FC<HeaderProps> = ({
                       <button
                         type="button"
                         onClick={() => onSetDutyStatus('OFF_DUTY')}
-                        className={`py-1 rounded text-[10px] font-semibold border transition-all ${
+                        className={`py-1 rounded text-[10px] font-semibold border transition-all cursor-pointer ${
                           currentUser.dutyStatus === 'OFF_DUTY'
                             ? 'bg-[#6B7280]/20 text-[#D1D5DB] border-[#6B7280]/50'
                             : 'bg-[#141311] text-[#8E877C] border-[#2A2824] hover:text-[#F3EFEA]'
@@ -295,7 +298,7 @@ export const Header: React.FC<HeaderProps> = ({
                         setIsUserMenuOpen(false);
                         onOpenProfile();
                       }}
-                      className="w-full text-left px-2.5 py-1.5 rounded-lg text-[#D8D2C7] hover:text-[#F3EFEA] hover:bg-[#252320] transition-colors flex items-center gap-2"
+                      className="w-full text-left px-2.5 py-1.5 rounded-lg text-[#D8D2C7] hover:text-[#F3EFEA] hover:bg-[#252320] transition-colors flex items-center gap-2 cursor-pointer"
                     >
                       <User className="w-3.5 h-3.5 text-[#C5A880]" />
                       <span>My Personal Profile</span>
@@ -307,23 +310,25 @@ export const Header: React.FC<HeaderProps> = ({
                         setIsUserMenuOpen(false);
                         setActiveTab('accounts');
                       }}
-                      className="w-full text-left px-2.5 py-1.5 rounded-lg text-[#D8D2C7] hover:text-[#F3EFEA] hover:bg-[#252320] transition-colors flex items-center gap-2"
+                      className="w-full text-left px-2.5 py-1.5 rounded-lg text-[#D8D2C7] hover:text-[#F3EFEA] hover:bg-[#252320] transition-colors flex items-center gap-2 cursor-pointer"
                     >
                       <Users className="w-3.5 h-3.5 text-[#C5A880]" />
                       <span>Staff Accounts Directory</span>
                     </button>
 
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIsUserMenuOpen(false);
-                        setActiveTab('storage');
-                      }}
-                      className="w-full text-left px-2.5 py-1.5 rounded-lg text-[#D8D2C7] hover:text-[#F3EFEA] hover:bg-[#252320] transition-colors flex items-center gap-2"
-                    >
-                      <Cloud className="w-3.5 h-3.5 text-[#C5A880]" />
-                      <span>Google Drive &amp; Netlify</span>
-                    </button>
+                    {onOpenGoogleDrive && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsUserMenuOpen(false);
+                          onOpenGoogleDrive();
+                        }}
+                        className="w-full text-left px-2.5 py-1.5 rounded-lg text-[#D8D2C7] hover:text-[#F3EFEA] hover:bg-[#252320] transition-colors flex items-center gap-2 cursor-pointer"
+                      >
+                        <Cloud className="w-3.5 h-3.5 text-[#C5A880]" />
+                        <span>Google Drive Backups</span>
+                      </button>
+                    )}
 
                     <button
                       type="button"
@@ -331,7 +336,7 @@ export const Header: React.FC<HeaderProps> = ({
                         setIsUserMenuOpen(false);
                         onOpenLogin();
                       }}
-                      className="w-full text-left px-2.5 py-1.5 rounded-lg text-[#D8D2C7] hover:text-[#F3EFEA] hover:bg-[#252320] transition-colors flex items-center gap-2"
+                      className="w-full text-left px-2.5 py-1.5 rounded-lg text-[#D8D2C7] hover:text-[#F3EFEA] hover:bg-[#252320] transition-colors flex items-center gap-2 cursor-pointer"
                     >
                       <KeyRound className="w-3.5 h-3.5 text-[#C5A880]" />
                       <span>Switch Account / Sign In</span>
@@ -343,7 +348,7 @@ export const Header: React.FC<HeaderProps> = ({
                         setIsUserMenuOpen(false);
                         onLogout();
                       }}
-                      className="w-full text-left px-2.5 py-1.5 rounded-lg text-[#E63946] hover:bg-[#2A1517] transition-colors flex items-center gap-2"
+                      className="w-full text-left px-2.5 py-1.5 rounded-lg text-[#E63946] hover:bg-[#2A1517] transition-colors flex items-center gap-2 cursor-pointer"
                     >
                       <LogOut className="w-3.5 h-3.5" />
                       <span>Sign Out</span>

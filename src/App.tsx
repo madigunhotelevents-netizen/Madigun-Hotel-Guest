@@ -9,7 +9,7 @@ import { GuestView } from './components/GuestView';
 import { FrontDeskView } from './components/FrontDeskView';
 import { QRManagementView } from './components/QRManagementView';
 import { AccountsManagementView } from './components/AccountsManagementView';
-import { GoogleDriveManager } from './components/GoogleDriveManager';
+import { GoogleDriveModal } from './components/GoogleDriveModal';
 import { LoginModal } from './components/LoginModal';
 import { ProfileModal } from './components/ProfileModal';
 import { getStoredRequests, subscribeToRequestEvents } from './services/storageService';
@@ -24,7 +24,7 @@ import { playConciergeBell, playUrgentAlert } from './services/soundService';
 import { UserProfile, DutyStatus } from './types/hotel';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'guest' | 'frontdesk' | 'qr' | 'accounts' | 'storage'>('guest');
+  const [activeTab, setActiveTab] = useState<'guest' | 'frontdesk' | 'qr' | 'accounts'>('guest');
   const [roomNumber, setRoomNumber] = useState<string>('101');
   const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
   const [newRequestsCount, setNewRequestsCount] = useState<number>(0);
@@ -33,10 +33,11 @@ export default function App() {
   // Modal states
   const [isLoginModalOpen, setIsLoginModalOpen] = useState<boolean>(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState<boolean>(false);
+  const [isGoogleDriveModalOpen, setIsGoogleDriveModalOpen] = useState<boolean>(false);
 
   // Helper to extract room number and view mode from URL params, paths, and hashes
   const parseUrlState = () => {
-    if (typeof window === 'undefined') return { room: '101', view: 'guest' };
+    if (typeof window === 'undefined') return { room: '101', view: 'guest' as const };
 
     const searchParams = new URLSearchParams(window.location.search);
     let detectedRoom = searchParams.get('room') || searchParams.get('r') || searchParams.get('rm');
@@ -75,9 +76,6 @@ export default function App() {
     // Staff explicit views
     if (viewParam === 'frontdesk' || viewParam === 'staff') {
       return { room: localStorage.getItem('madigun_active_guest_room') || '101', view: 'frontdesk' as const };
-    }
-    if (viewParam === 'storage' || viewParam === 'drive' || viewParam === 'deploy') {
-      return { room: localStorage.getItem('madigun_active_guest_room') || '101', view: 'storage' as const };
     }
     if (viewParam === 'qr') {
       return { room: localStorage.getItem('madigun_active_guest_room') || '101', view: 'qr' as const };
@@ -234,6 +232,7 @@ export default function App() {
         onOpenProfile={() => setIsProfileModalOpen(true)}
         onLogout={handleLogout}
         onSetDutyStatus={handleSetDutyStatus}
+        onOpenGoogleDrive={() => setIsGoogleDriveModalOpen(true)}
       />
 
       {/* Main Content Body */}
@@ -253,24 +252,15 @@ export default function App() {
             onNavigateToGuest={handleNavigateToGuestForRoom}
             currentUser={currentUser}
             onOpenLoginModal={() => setIsLoginModalOpen(true)}
+            onOpenGoogleDrive={() => setIsGoogleDriveModalOpen(true)}
           />
         )}
 
         {activeTab === 'accounts' && (
           <AccountsManagementView
             onOpenLoginModal={() => setIsLoginModalOpen(true)}
+            onOpenGoogleDrive={() => setIsGoogleDriveModalOpen(true)}
           />
-        )}
-
-        {activeTab === 'storage' && (
-          <div className="max-w-6xl mx-auto px-4 py-6 sm:py-8">
-            <GoogleDriveManager
-              currentUser={currentUser}
-              onDataRestored={() => {
-                updateCounts();
-              }}
-            />
-          </div>
         )}
 
         {activeTab === 'qr' && (
@@ -281,6 +271,15 @@ export default function App() {
       </main>
 
       {/* Global Modals */}
+      <GoogleDriveModal
+        isOpen={isGoogleDriveModalOpen}
+        onClose={() => setIsGoogleDriveModalOpen(false)}
+        currentUser={currentUser}
+        onDataRestored={() => {
+          updateCounts();
+        }}
+      />
+
       <LoginModal
         isOpen={isLoginModalOpen}
         onClose={() => setIsLoginModalOpen(false)}
