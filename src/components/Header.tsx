@@ -79,10 +79,11 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* Zone 2: Navigation Links */}
         <nav className="flex items-center gap-1 sm:gap-1.5 overflow-x-auto scrollbar-none py-0.5">
-          {/* Guest View Tab (Hidden when logged in as Front Desk staff to focus on Front Desk tasks) */}
-          {!isFrontDeskOrStaff && (
+          {/* Guest View Tab (Visible for Guests and Admin only, hidden when logged in as Front Desk) */}
+          {(!currentUser || isDeveloper) && (
             <button
               type="button"
+              id="header-nav-guest"
               onClick={() => setActiveTab('guest')}
               className={`whitespace-nowrap shrink-0 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-[#C5A880] focus-visible:outline-none cursor-pointer ${
                 activeTab === 'guest'
@@ -102,6 +103,7 @@ export const Header: React.FC<HeaderProps> = ({
           {/* Front Desk Tab (Always available to Front Desk staff and Admins) */}
           <button
             type="button"
+            id="header-nav-frontdesk"
             onClick={() => setActiveTab('frontdesk')}
             className={`whitespace-nowrap shrink-0 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all flex items-center gap-1.5 relative focus-visible:ring-2 focus-visible:ring-[#C5A880] focus-visible:outline-none cursor-pointer ${
               activeTab === 'frontdesk'
@@ -121,6 +123,7 @@ export const Header: React.FC<HeaderProps> = ({
           {/* Room Occupancy & Keycards Tab (Front Desk and Admin) */}
           <button
             type="button"
+            id="header-nav-occupancy"
             onClick={() => setActiveTab('occupancy')}
             className={`whitespace-nowrap shrink-0 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-[#C5A880] focus-visible:outline-none cursor-pointer ${
               activeTab === 'occupancy'
@@ -138,6 +141,7 @@ export const Header: React.FC<HeaderProps> = ({
             <>
               <button
                 type="button"
+                id="header-nav-accounts"
                 onClick={() => setActiveTab('accounts')}
                 className={`whitespace-nowrap shrink-0 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-[#C5A880] focus-visible:outline-none cursor-pointer ${
                   activeTab === 'accounts'
@@ -152,6 +156,7 @@ export const Header: React.FC<HeaderProps> = ({
 
               <button
                 type="button"
+                id="header-nav-qr"
                 onClick={() => setActiveTab('qr')}
                 className={`whitespace-nowrap shrink-0 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-[#C5A880] focus-visible:outline-none cursor-pointer ${
                   activeTab === 'qr'

@@ -48,6 +48,9 @@ export interface RoomStay {
   status: RoomStayStatus;
   guestName?: string;
   accessCode?: string; // Automatically generated code e.g. "MDG-4821" or "7849"
+  floor?: number; // Room floor assignment (Floor 1, 2, 3, 4, etc.)
+  bedType?: string; // e.g. "1 King Bed", "2 Queen Beds", "2 Twin Beds", etc.
+  roomType?: string; // e.g. "Deluxe King Room", "Executive Suite", etc.
   checkInAt?: number;
   checkOutAt?: number;
   lastUpdated: number;

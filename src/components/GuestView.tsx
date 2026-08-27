@@ -60,36 +60,18 @@ export const GuestView: React.FC<GuestViewProps> = ({
 
   const schedule = useServiceSchedule();
 
-  // Check URL params or sessionStorage for room access code
+  // Check URL params for room access code without local/session cache
   const checkAccessAuth = (currentStay: RoomStay) => {
-    if (typeof window === 'undefined') return true;
-
     // If room is checked out, no access is allowed
     if (currentStay.status === 'CHECKED_OUT') {
       setIsAuthenticated(false);
       return false;
     }
 
-    // Check URL search parameters (?code=MDG-1014 or ?c=1014)
-    const params = new URLSearchParams(window.location.search);
-    const urlCode = params.get('code') || params.get('c') || params.get('passcode');
-
-    if (urlCode && verifyRoomAccessCode(roomNumber, urlCode)) {
-      try {
-        sessionStorage.setItem(`madigun_room_auth_${roomNumber}`, urlCode);
-      } catch {}
-      setIsAuthenticated(true);
+    // If already authenticated in current state for this room, maintain it if code still matches
+    if (isAuthenticated) {
       return true;
     }
-
-    // Check saved session code
-    try {
-      const savedCode = sessionStorage.getItem(`madigun_room_auth_${roomNumber}`);
-      if (savedCode && verifyRoomAccessCode(roomNumber, savedCode)) {
-        setIsAuthenticated(true);
-        return true;
-      }
-    } catch {}
 
     // If room stay doesn't have an accessCode requirement, grant access
     if (!currentStay.accessCode) {
@@ -97,7 +79,6 @@ export const GuestView: React.FC<GuestViewProps> = ({
       return true;
     }
 
-    setIsAuthenticated(false);
     return false;
   };
 
@@ -109,7 +90,11 @@ export const GuestView: React.FC<GuestViewProps> = ({
     
     const freshStay = getRoomStay(roomNumber);
     setRoomStay(freshStay);
-    checkAccessAuth(freshStay);
+
+    // If room checked out, immediately revoke access
+    if (freshStay.status === 'CHECKED_OUT') {
+      setIsAuthenticated(false);
+    }
 
     // If we have an active confirmation, keep its status updated in real-time!
     if (activeConfirmation) {
@@ -124,12 +109,17 @@ export const GuestView: React.FC<GuestViewProps> = ({
   };
 
   useEffect(() => {
+    // Reset authentication when roomNumber changes
+    setIsAuthenticated(false);
+    setEnteredPasscode('');
+    setPasscodeError(null);
     refreshRoomData();
+
     const unsubscribe = subscribeToRequestEvents(() => {
       refreshRoomData();
     });
     return unsubscribe;
-  }, [roomNumber, activeConfirmation]);
+  }, [roomNumber]);
 
   // Handle manually entering room access passcode
   const handleVerifyPasscode = (e: React.FormEvent) => {
@@ -138,14 +128,11 @@ export const GuestView: React.FC<GuestViewProps> = ({
 
     const cleanInput = enteredPasscode.trim().toUpperCase();
     if (!cleanInput) {
-      setPasscodeError('Please enter the access passcode found on your keycard.');
+      setPasscodeError('Please enter the access passcode found on your keycard slip.');
       return;
     }
 
     if (verifyRoomAccessCode(roomNumber, cleanInput)) {
-      try {
-        sessionStorage.setItem(`madigun_room_auth_${roomNumber}`, cleanInput);
-      } catch {}
       setIsAuthenticated(true);
       setPasscodeError(null);
       if (soundEnabled) {

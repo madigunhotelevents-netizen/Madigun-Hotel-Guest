@@ -68,27 +68,25 @@ export default function App() {
 
     // If a room parameter is detected in the URL, it is a guest scanning a QR code!
     if (detectedRoom) {
-      localStorage.setItem('madigun_active_guest_room', detectedRoom);
       return { room: detectedRoom, view: 'guest' };
     }
 
     // Staff explicit views
     if (viewParam === 'frontdesk' || viewParam === 'staff') {
-      return { room: localStorage.getItem('madigun_active_guest_room') || '101', view: 'frontdesk' };
+      return { room: '101', view: 'frontdesk' };
     }
     if (viewParam === 'occupancy' || viewParam === 'rooms') {
-      return { room: localStorage.getItem('madigun_active_guest_room') || '101', view: 'occupancy' };
+      return { room: '101', view: 'occupancy' };
     }
     if (viewParam === 'qr') {
-      return { room: localStorage.getItem('madigun_active_guest_room') || '101', view: 'qr' };
+      return { room: '101', view: 'qr' };
     }
     if (viewParam === 'accounts' || viewParam === 'employees') {
-      return { room: localStorage.getItem('madigun_active_guest_room') || '101', view: 'accounts' };
+      return { room: '101', view: 'accounts' };
     }
 
-    // Default: Automatic Guest User Interface (No login required)
-    const savedGuestRoom = localStorage.getItem('madigun_active_guest_room') || '101';
-    return { room: savedGuestRoom, view: 'guest' };
+    // Default: Automatic Guest User Interface
+    return { room: '101', view: 'guest' };
   };
 
   // Initialize room number and tab from URL

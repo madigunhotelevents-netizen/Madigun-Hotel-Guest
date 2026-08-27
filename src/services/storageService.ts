@@ -13,9 +13,6 @@ import {
   writeBatch
 } from 'firebase/firestore';
 
-const STORAGE_KEY = 'madigun_hotel_requests_v1';
-const ROOM_STAYS_STORAGE_KEY = 'madigun_hotel_room_stays_v1';
-const STAFF_STORAGE_KEY = 'madigun_hotel_staff_members_v1';
 const CHANNEL_NAME = 'madigun_hotel_events_channel';
 const FIRESTORE_COLLECTION = 'requests';
 const FIRESTORE_ROOM_STAYS = 'room_stays';
@@ -80,16 +77,49 @@ const INITIAL_DEMO_REQUESTS: HotelRequest[] = [
   },
 ];
 
-// Initial default room stays with pre-generated guest access passcodes
-const INITIAL_ROOM_STAYS: RoomStay[] = [
-  { roomNumber: '101', status: 'OCCUPIED', accessCode: 'MDG-1014', guestName: 'In-Room Guest', checkInAt: Date.now() - 1000 * 60 * 60 * 14, lastUpdated: Date.now() },
-  { roomNumber: '102', status: 'OCCUPIED', accessCode: 'MDG-1028', guestName: 'In-Room Guest', checkInAt: Date.now() - 1000 * 60 * 60 * 20, lastUpdated: Date.now() },
-  { roomNumber: '103', status: 'OCCUPIED', accessCode: 'MDG-1035', guestName: 'In-Room Guest', checkInAt: Date.now() - 1000 * 60 * 60 * 8, lastUpdated: Date.now() },
-  { roomNumber: '104', status: 'OCCUPIED', accessCode: 'MDG-1042', guestName: 'In-Room Guest', checkInAt: Date.now() - 1000 * 60 * 60 * 30, lastUpdated: Date.now() },
-  { roomNumber: '105', status: 'OCCUPIED', accessCode: 'MDG-1059', guestName: 'In-Room Guest', checkInAt: Date.now() - 1000 * 60 * 60 * 12, lastUpdated: Date.now() },
-  { roomNumber: '201', status: 'OCCUPIED', accessCode: 'MDG-2016', guestName: 'In-Room Guest', checkInAt: Date.now() - 1000 * 60 * 60 * 18, lastUpdated: Date.now() },
-  { roomNumber: '205', status: 'OCCUPIED', accessCode: 'MDG-2051', guestName: 'In-Room Guest', checkInAt: Date.now() - 1000 * 60 * 60 * 6, lastUpdated: Date.now() },
-  { roomNumber: '308', status: 'OCCUPIED', accessCode: 'MDG-3087', guestName: 'In-Room Guest', checkInAt: Date.now() - 1000 * 60 * 60 * 24, lastUpdated: Date.now() },
+// Initial default room stays with floor, bedType, roomType, and pre-generated access passcodes
+export const INITIAL_ROOM_STAYS: RoomStay[] = [
+  // Floor 1
+  { roomNumber: '101', status: 'OCCUPIED', accessCode: 'MDG-1014', guestName: 'In-Room Guest', floor: 1, roomType: 'Deluxe King Room', bedType: '1 King Bed', checkInAt: Date.now() - 1000 * 60 * 60 * 14, lastUpdated: Date.now() },
+  { roomNumber: '102', status: 'OCCUPIED', accessCode: 'MDG-1028', guestName: 'In-Room Guest', floor: 1, roomType: 'Deluxe Double Queen', bedType: '2 Queen Beds', checkInAt: Date.now() - 1000 * 60 * 60 * 20, lastUpdated: Date.now() },
+  { roomNumber: '103', status: 'OCCUPIED', accessCode: 'MDG-1035', guestName: 'In-Room Guest', floor: 1, roomType: 'Deluxe King Room', bedType: '1 King Bed', checkInAt: Date.now() - 1000 * 60 * 60 * 8, lastUpdated: Date.now() },
+  { roomNumber: '104', status: 'OCCUPIED', accessCode: 'MDG-1042', guestName: 'In-Room Guest', floor: 1, roomType: 'Superior Twin Room', bedType: '2 Twin Beds', checkInAt: Date.now() - 1000 * 60 * 60 * 30, lastUpdated: Date.now() },
+  { roomNumber: '105', status: 'OCCUPIED', accessCode: 'MDG-1059', guestName: 'In-Room Guest', floor: 1, roomType: 'Deluxe King Room', bedType: '1 King Bed', checkInAt: Date.now() - 1000 * 60 * 60 * 12, lastUpdated: Date.now() },
+  { roomNumber: '106', status: 'CHECKED_OUT', floor: 1, roomType: 'Deluxe Double Queen', bedType: '2 Queen Beds', lastUpdated: Date.now() },
+  { roomNumber: '107', status: 'CHECKED_OUT', floor: 1, roomType: 'Deluxe King Room', bedType: '1 King Bed', lastUpdated: Date.now() },
+  { roomNumber: '108', status: 'CHECKED_OUT', floor: 1, roomType: 'Superior King Room', bedType: '1 King Bed', lastUpdated: Date.now() },
+  { roomNumber: '109', status: 'CHECKED_OUT', floor: 1, roomType: 'Deluxe Double Queen', bedType: '2 Queen Beds', lastUpdated: Date.now() },
+  { roomNumber: '110', status: 'CHECKED_OUT', floor: 1, roomType: 'Executive Suite', bedType: '1 King + Sofa Bed', lastUpdated: Date.now() },
+
+  // Floor 2
+  { roomNumber: '201', status: 'OCCUPIED', accessCode: 'MDG-2016', guestName: 'In-Room Guest', floor: 2, roomType: 'Deluxe King Room', bedType: '1 King Bed', checkInAt: Date.now() - 1000 * 60 * 60 * 18, lastUpdated: Date.now() },
+  { roomNumber: '202', status: 'CHECKED_OUT', floor: 2, roomType: 'Deluxe King Room', bedType: '1 King Bed', lastUpdated: Date.now() },
+  { roomNumber: '203', status: 'CHECKED_OUT', floor: 2, roomType: 'Deluxe Double Queen', bedType: '2 Queen Beds', lastUpdated: Date.now() },
+  { roomNumber: '204', status: 'CHECKED_OUT', floor: 2, roomType: 'Deluxe King Room', bedType: '1 King Bed', lastUpdated: Date.now() },
+  { roomNumber: '205', status: 'OCCUPIED', accessCode: 'MDG-2051', guestName: 'In-Room Guest', floor: 2, roomType: 'Executive King Suite', bedType: '1 King Bed', checkInAt: Date.now() - 1000 * 60 * 60 * 6, lastUpdated: Date.now() },
+  { roomNumber: '206', status: 'CHECKED_OUT', floor: 2, roomType: 'Superior Twin Room', bedType: '2 Twin Beds', lastUpdated: Date.now() },
+  { roomNumber: '207', status: 'CHECKED_OUT', floor: 2, roomType: 'Deluxe Double Queen', bedType: '2 Queen Beds', lastUpdated: Date.now() },
+  { roomNumber: '208', status: 'CHECKED_OUT', floor: 2, roomType: 'Deluxe King Room', bedType: '1 King Bed', lastUpdated: Date.now() },
+  { roomNumber: '209', status: 'CHECKED_OUT', floor: 2, roomType: 'Deluxe King Room', bedType: '1 King Bed', lastUpdated: Date.now() },
+  { roomNumber: '210', status: 'CHECKED_OUT', floor: 2, roomType: 'Junior Suite', bedType: '1 King + Lounge', lastUpdated: Date.now() },
+
+  // Floor 3
+  { roomNumber: '301', status: 'CHECKED_OUT', floor: 3, roomType: 'Deluxe King Room', bedType: '1 King Bed', lastUpdated: Date.now() },
+  { roomNumber: '302', status: 'CHECKED_OUT', floor: 3, roomType: 'Deluxe Double Queen', bedType: '2 Queen Beds', lastUpdated: Date.now() },
+  { roomNumber: '303', status: 'CHECKED_OUT', floor: 3, roomType: 'Deluxe King Room', bedType: '1 King Bed', lastUpdated: Date.now() },
+  { roomNumber: '304', status: 'CHECKED_OUT', floor: 3, roomType: 'Superior King Room', bedType: '1 King Bed', lastUpdated: Date.now() },
+  { roomNumber: '305', status: 'CHECKED_OUT', floor: 3, roomType: 'Deluxe Double Queen', bedType: '2 Queen Beds', lastUpdated: Date.now() },
+  { roomNumber: '306', status: 'CHECKED_OUT', floor: 3, roomType: 'Deluxe King Room', bedType: '1 King Bed', lastUpdated: Date.now() },
+  { roomNumber: '307', status: 'CHECKED_OUT', floor: 3, roomType: 'Superior Twin Room', bedType: '2 Twin Beds', lastUpdated: Date.now() },
+  { roomNumber: '308', status: 'OCCUPIED', accessCode: 'MDG-3087', guestName: 'In-Room Guest', floor: 3, roomType: 'Executive Suite', bedType: '1 King + Balcony', checkInAt: Date.now() - 1000 * 60 * 60 * 24, lastUpdated: Date.now() },
+  { roomNumber: '309', status: 'CHECKED_OUT', floor: 3, roomType: 'Deluxe Double Queen', bedType: '2 Queen Beds', lastUpdated: Date.now() },
+  { roomNumber: '310', status: 'CHECKED_OUT', floor: 3, roomType: 'Penthouse Junior', bedType: '1 King Bed', lastUpdated: Date.now() },
+
+  // Floor 4 & Suites
+  { roomNumber: '401', status: 'CHECKED_OUT', floor: 4, roomType: 'Presidential Royal Suite', bedType: 'Master Suite + Living', lastUpdated: Date.now() },
+  { roomNumber: '402', status: 'CHECKED_OUT', floor: 4, roomType: 'Madigun Signature Suite', bedType: '2 King Bedrooms', lastUpdated: Date.now() },
+  { roomNumber: '403', status: 'CHECKED_OUT', floor: 4, roomType: 'Skyline Terrace Suite', bedType: '1 King + Private Deck', lastUpdated: Date.now() },
+  { roomNumber: '404', status: 'CHECKED_OUT', floor: 4, roomType: 'Grand Ambassador Suite', bedType: 'Master Suite', lastUpdated: Date.now() },
 ];
 
 // Initial Hotel Staff Members (Roster for staff who don't need login accounts)
@@ -168,9 +198,9 @@ export const INITIAL_STAFF_MEMBERS: StaffMember[] = [
   },
 ];
 
-let inMemoryCache: HotelRequest[] = [];
-let roomStaysCache: Map<string, RoomStay> = new Map();
-let staffMembersCache: StaffMember[] = [];
+let inMemoryCache: HotelRequest[] = [...INITIAL_DEMO_REQUESTS];
+let roomStaysCache: Map<string, RoomStay> = new Map(INITIAL_ROOM_STAYS.map((s) => [s.roomNumber, s]));
+let staffMembersCache: StaffMember[] = [...INITIAL_STAFF_MEMBERS];
 let isInitialFetchDone = false;
 let isRoomStaysInitialFetchDone = false;
 let isStaffInitialFetchDone = false;
@@ -204,48 +234,8 @@ function notifyListeners(event: { type: string; request?: HotelRequest; roomStay
   });
 }
 
-// Initial cache setup from localStorage
+// Setup Firestore real-time listeners immediately (No local browser caching)
 if (typeof window !== 'undefined') {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        inMemoryCache = parsed;
-      }
-    }
-  } catch {}
-  if (inMemoryCache.length === 0) {
-    inMemoryCache = [...INITIAL_DEMO_REQUESTS];
-  }
-
-  try {
-    const rawStays = localStorage.getItem(ROOM_STAYS_STORAGE_KEY);
-    if (rawStays) {
-      const parsedStays = JSON.parse(rawStays);
-      if (Array.isArray(parsedStays)) {
-        parsedStays.forEach((s: RoomStay) => roomStaysCache.set(s.roomNumber, s));
-      }
-    }
-  } catch {}
-  if (roomStaysCache.size === 0) {
-    INITIAL_ROOM_STAYS.forEach((s) => roomStaysCache.set(s.roomNumber, s));
-  }
-
-  try {
-    const rawStaff = localStorage.getItem(STAFF_STORAGE_KEY);
-    if (rawStaff) {
-      const parsedStaff = JSON.parse(rawStaff);
-      if (Array.isArray(parsedStaff) && parsedStaff.length > 0) {
-        staffMembersCache = parsedStaff;
-      }
-    }
-  } catch {}
-  if (staffMembersCache.length === 0) {
-    staffMembersCache = [...INITIAL_STAFF_MEMBERS];
-  }
-
-  // Setup Firestore real-time listeners immediately
   initFirestoreRealtimeSync();
   initRoomStaysFirestoreRealtimeSync();
   initStaffFirestoreRealtimeSync();
@@ -302,9 +292,6 @@ function initFirestoreRealtimeSync() {
 
         inMemoryCache = freshList;
         isInitialFetchDone = true;
-        try {
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(freshList));
-        } catch {}
 
         if (newlyAdded.length > 0) {
           newlyAdded.forEach((item) => {
@@ -342,11 +329,15 @@ function initRoomStaysFirestoreRealtimeSync() {
         const freshMap = new Map<string, RoomStay>();
         snapshot.forEach((docSnap) => {
           const data = docSnap.data() as Partial<RoomStay>;
+          const defaultRef = INITIAL_ROOM_STAYS.find((r) => r.roomNumber === docSnap.id);
           const stay: RoomStay = {
             roomNumber: docSnap.id,
-            status: (data.status as RoomStayStatus) || 'OCCUPIED',
+            status: (data.status as RoomStayStatus) || 'CHECKED_OUT',
             guestName: data.guestName,
             accessCode: data.accessCode,
+            floor: typeof data.floor === 'number' ? data.floor : (defaultRef?.floor || 1),
+            bedType: data.bedType || defaultRef?.bedType || '1 King Bed',
+            roomType: data.roomType || defaultRef?.roomType || 'Deluxe Room',
             checkInAt: data.checkInAt,
             checkOutAt: data.checkOutAt,
             notes: data.notes,
@@ -355,15 +346,15 @@ function initRoomStaysFirestoreRealtimeSync() {
           freshMap.set(docSnap.id, stay);
         });
 
+        // Ensure all default rooms exist in map
+        INITIAL_ROOM_STAYS.forEach((initStay) => {
+          if (!freshMap.has(initStay.roomNumber)) {
+            freshMap.set(initStay.roomNumber, initStay);
+          }
+        });
+
         roomStaysCache = freshMap;
         isRoomStaysInitialFetchDone = true;
-        try {
-          localStorage.setItem(
-            ROOM_STAYS_STORAGE_KEY,
-            JSON.stringify(Array.from(freshMap.values()))
-          );
-        } catch {}
-
         notifyListeners({ type: 'ROOM_STAYS_UPDATED' });
       },
       (err) => {
@@ -412,9 +403,6 @@ function initStaffFirestoreRealtimeSync() {
         if (freshStaff.length > 0) {
           staffMembersCache = freshStaff;
           isStaffInitialFetchDone = true;
-          try {
-            localStorage.setItem(STAFF_STORAGE_KEY, JSON.stringify(freshStaff));
-          } catch {}
           notifyListeners({ type: 'STAFF_MEMBERS_UPDATED' });
         }
       },
@@ -500,9 +488,6 @@ export async function fetchRequestsFromServer(): Promise<HotelRequest[]> {
         });
       });
       inMemoryCache = serverList;
-      try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(serverList));
-      } catch {}
       notifyListeners({ type: 'REQUESTS_UPDATED' });
       return serverList;
     }
@@ -514,9 +499,6 @@ export async function fetchRequestsFromServer(): Promise<HotelRequest[]> {
 
 export function saveStoredRequests(requests: HotelRequest[]): void {
   inMemoryCache = requests;
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(requests));
-  } catch {}
 }
 
 export function createNewRequest(
@@ -536,7 +518,6 @@ export function createNewRequest(
   };
 
   inMemoryCache = [newReq, ...inMemoryCache];
-  saveStoredRequests(inMemoryCache);
 
   try {
     const docRef = doc(db, FIRESTORE_COLLECTION, newReq.id);
@@ -620,8 +601,6 @@ export function updateRequestStatus(
     return req;
   });
 
-  saveStoredRequests(inMemoryCache);
-
   if (updatedReq) {
     try {
       const docRef = doc(db, FIRESTORE_COLLECTION, requestId);
@@ -653,7 +632,6 @@ export function updateRequestStatus(
 
 export function deleteRequest(requestId: string): HotelRequest[] {
   inMemoryCache = inMemoryCache.filter((r) => r.id !== requestId);
-  saveStoredRequests(inMemoryCache);
 
   const payload = {
     type: 'REQUEST_DELETED',
@@ -682,7 +660,6 @@ export function deleteRequest(requestId: string): HotelRequest[] {
 
 export function resetToDemoRequests(): HotelRequest[] {
   inMemoryCache = [...INITIAL_DEMO_REQUESTS];
-  saveStoredRequests(inMemoryCache);
   seedInitialFirestoreRequests();
 
   fetch('/api/requests/reset', {
@@ -699,12 +676,17 @@ export function getRoomStay(roomNumber: string): RoomStay {
   const stay = roomStaysCache.get(clean);
   if (stay) return stay;
 
-  // Default: If room not found, generate an active occupied stay
+  const defaultMeta = INITIAL_ROOM_STAYS.find((r) => r.roomNumber === clean);
+
+  // Default fallback if not found in cache
   return {
     roomNumber: clean,
     status: 'OCCUPIED',
     accessCode: generateRoomAccessCode(clean),
     guestName: `Room ${clean} Guest`,
+    floor: defaultMeta?.floor || 1,
+    bedType: defaultMeta?.bedType || '1 King Bed',
+    roomType: defaultMeta?.roomType || 'Deluxe Room',
     checkInAt: Date.now() - 1000 * 60 * 60 * 6,
     lastUpdated: Date.now(),
   };
@@ -726,6 +708,7 @@ export function checkInRoom(
 ): RoomStay {
   const clean = roomNumber.trim();
   const now = Date.now();
+  const existing = roomStaysCache.get(clean);
   const generatedCode = customCode?.trim() || generateRoomAccessCode(clean);
 
   const newStay: RoomStay = {
@@ -733,19 +716,15 @@ export function checkInRoom(
     status: 'OCCUPIED',
     accessCode: generatedCode,
     guestName: guestName.trim() || `Room ${clean} Guest`,
+    floor: existing?.floor ?? 1,
+    bedType: existing?.bedType ?? '1 King Bed',
+    roomType: existing?.roomType ?? 'Deluxe Room',
     checkInAt: now,
     checkOutAt: undefined,
     lastUpdated: now,
   };
 
   roomStaysCache.set(clean, newStay);
-
-  try {
-    localStorage.setItem(
-      ROOM_STAYS_STORAGE_KEY,
-      JSON.stringify(Array.from(roomStaysCache.values()))
-    );
-  } catch {}
 
   const eventPayload = {
     type: 'ROOM_STAY_UPDATED',
@@ -783,19 +762,15 @@ export function checkOutRoom(roomNumber: string): RoomStay {
     status: 'CHECKED_OUT',
     accessCode: undefined, // Expired / Invalidated
     guestName: existing?.guestName || `Room ${clean} Guest`,
+    floor: existing?.floor ?? 1,
+    bedType: existing?.bedType ?? '1 King Bed',
+    roomType: existing?.roomType ?? 'Deluxe Room',
     checkInAt: existing?.checkInAt,
     checkOutAt: now,
     lastUpdated: now,
   };
 
   roomStaysCache.set(clean, updatedStay);
-
-  try {
-    localStorage.setItem(
-      ROOM_STAYS_STORAGE_KEY,
-      JSON.stringify(Array.from(roomStaysCache.values()))
-    );
-  } catch {}
 
   const eventPayload = {
     type: 'ROOM_STAY_UPDATED',
@@ -835,13 +810,6 @@ export function regenerateRoomAccessCode(roomNumber: string): RoomStay {
 
   roomStaysCache.set(clean, updatedStay);
 
-  try {
-    localStorage.setItem(
-      ROOM_STAYS_STORAGE_KEY,
-      JSON.stringify(Array.from(roomStaysCache.values()))
-    );
-  } catch {}
-
   const eventPayload = {
     type: 'ROOM_STAY_UPDATED',
     roomStay: updatedStay,
@@ -856,6 +824,55 @@ export function regenerateRoomAccessCode(roomNumber: string): RoomStay {
     const docRef = doc(db, FIRESTORE_ROOM_STAYS, clean);
     setDoc(docRef, updatedStay).catch((err) => {
       console.warn('Firestore set room stay error:', err);
+    });
+  } catch {}
+
+  return updatedStay;
+}
+
+/**
+ * Admin / Manager Room Details Modification:
+ * Allows modifying floor, bed size / bed type, room type, and notes.
+ * Directly persists to Cloud Firestore and updates in-memory cache in real-time.
+ */
+export function updateRoomDetails(
+  roomNumber: string,
+  details: {
+    floor?: number;
+    bedType?: string;
+    roomType?: string;
+    notes?: string;
+  }
+): RoomStay {
+  const clean = roomNumber.trim();
+  const existing = getRoomStay(clean);
+  const now = Date.now();
+
+  const updatedStay: RoomStay = {
+    ...existing,
+    floor: typeof details.floor === 'number' ? details.floor : existing.floor,
+    bedType: details.bedType !== undefined ? details.bedType.trim() : existing.bedType,
+    roomType: details.roomType !== undefined ? details.roomType.trim() : existing.roomType,
+    notes: details.notes !== undefined ? details.notes.trim() : existing.notes,
+    lastUpdated: now,
+  };
+
+  roomStaysCache.set(clean, updatedStay);
+
+  const eventPayload = {
+    type: 'ROOM_STAY_UPDATED',
+    roomStay: updatedStay,
+  };
+
+  if (broadcastChannel) {
+    broadcastChannel.postMessage(eventPayload);
+  }
+  notifyListeners(eventPayload);
+
+  try {
+    const docRef = doc(db, FIRESTORE_ROOM_STAYS, clean);
+    setDoc(docRef, updatedStay, { merge: true }).catch((err) => {
+      console.warn('Firestore update room details error:', err);
     });
   } catch {}
 
@@ -908,10 +925,6 @@ export function addStaffMember(staffData: Omit<StaffMember, 'id' | 'createdAt'>)
 
   staffMembersCache = [newStaff, ...staffMembersCache];
 
-  try {
-    localStorage.setItem(STAFF_STORAGE_KEY, JSON.stringify(staffMembersCache));
-  } catch {}
-
   const payload = {
     type: 'STAFF_MEMBERS_UPDATED',
     staffMember: newStaff,
@@ -939,10 +952,6 @@ export function updateStaffMember(id: string, updates: Partial<StaffMember>): St
     }
     return s;
   });
-
-  try {
-    localStorage.setItem(STAFF_STORAGE_KEY, JSON.stringify(staffMembersCache));
-  } catch {}
 
   const updatedItem = staffMembersCache.find((s) => s.id === id);
   const payload = {
@@ -974,10 +983,6 @@ export function setStaffMemberDutyStatus(id: string, dutyStatus: DutyStatus): St
 export function deleteStaffMember(id: string): StaffMember[] {
   staffMembersCache = staffMembersCache.filter((s) => s.id !== id);
 
-  try {
-    localStorage.setItem(STAFF_STORAGE_KEY, JSON.stringify(staffMembersCache));
-  } catch {}
-
   const payload = {
     type: 'STAFF_MEMBERS_UPDATED',
   };
@@ -999,9 +1004,6 @@ export function deleteStaffMember(id: string): StaffMember[] {
 
 export function resetToDemoStaffMembers(): StaffMember[] {
   staffMembersCache = [...INITIAL_STAFF_MEMBERS];
-  try {
-    localStorage.setItem(STAFF_STORAGE_KEY, JSON.stringify(staffMembersCache));
-  } catch {}
   seedInitialFirestoreStaffMembers();
   notifyListeners({ type: 'STAFF_MEMBERS_UPDATED' });
   return staffMembersCache;
@@ -1016,43 +1018,12 @@ export function subscribeToRequestEvents(
   initRoomStaysFirestoreRealtimeSync();
   initStaffFirestoreRealtimeSync();
 
-  const handleStorage = (e: StorageEvent) => {
-    if (e.key === STORAGE_KEY && e.newValue) {
-      try {
-        inMemoryCache = JSON.parse(e.newValue);
-        callback({ type: 'REQUESTS_UPDATED' });
-      } catch {}
-    }
-    if (e.key === ROOM_STAYS_STORAGE_KEY && e.newValue) {
-      try {
-        const parsed = JSON.parse(e.newValue);
-        if (Array.isArray(parsed)) {
-          const map = new Map<string, RoomStay>();
-          parsed.forEach((s: RoomStay) => map.set(s.roomNumber, s));
-          roomStaysCache = map;
-          callback({ type: 'ROOM_STAYS_UPDATED' });
-        }
-      } catch {}
-    }
-    if (e.key === STAFF_STORAGE_KEY && e.newValue) {
-      try {
-        const parsedStaff = JSON.parse(e.newValue);
-        if (Array.isArray(parsedStaff)) {
-          staffMembersCache = parsedStaff;
-          callback({ type: 'STAFF_MEMBERS_UPDATED' });
-        }
-      } catch {}
-    }
-  };
-  window.addEventListener('storage', handleStorage);
-
   const pollInterval = setInterval(() => {
     fetchRequestsFromServer().catch(() => {});
-  }, 4000);
+  }, 5000);
 
   return () => {
     eventListeners.delete(callback);
-    window.removeEventListener('storage', handleStorage);
     clearInterval(pollInterval);
   };
 }

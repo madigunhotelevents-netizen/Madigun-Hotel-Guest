@@ -11,8 +11,6 @@ import {
   writeBatch
 } from 'firebase/firestore';
 
-const ACCOUNTS_STORAGE_KEY = 'madigun_hotel_accounts_v1';
-const CURRENT_USER_KEY = 'madigun_hotel_current_user_v1';
 const AUTH_CHANNEL_NAME = 'madigun_hotel_auth_channel';
 const FIRESTORE_ACCOUNTS_COLLECTION = 'accounts';
 
@@ -106,7 +104,8 @@ function notifyAuthChange(type: string, data?: any) {
   }
 }
 
-let accountsCache: UserProfile[] = [];
+let accountsCache: UserProfile[] = [...INITIAL_ACCOUNTS];
+let currentLoggedUser: UserProfile | null = null;
 let isAccountsInitialFetchDone = false;
 let accountsFirestoreUnsubscribe: (() => void) | null = null;
 
@@ -132,9 +131,6 @@ function initAccountsFirestoreRealtimeSync() {
         if (freshList.length > 0) {
           accountsCache = freshList;
           isAccountsInitialFetchDone = true;
-          try {
-            localStorage.setItem(ACCOUNTS_STORAGE_KEY, JSON.stringify(freshList));
-          } catch {}
           notifyAuthChange('ACCOUNTS_UPDATED');
         }
       },
@@ -172,9 +168,6 @@ export async function fetchAccountsFromServer(): Promise<UserProfile[]> {
       }));
       accountsCache = serverData;
       isAccountsInitialFetchDone = true;
-      try {
-        localStorage.setItem(ACCOUNTS_STORAGE_KEY, JSON.stringify(serverData));
-      } catch {}
       notifyAuthChange('ACCOUNTS_UPDATED');
       return serverData;
     }
@@ -190,9 +183,6 @@ export async function fetchAccountsFromServer(): Promise<UserProfile[]> {
         if (Array.isArray(serverData) && serverData.length > 0) {
           accountsCache = serverData;
           isAccountsInitialFetchDone = true;
-          try {
-            localStorage.setItem(ACCOUNTS_STORAGE_KEY, JSON.stringify(serverData));
-          } catch {}
           notifyAuthChange('ACCOUNTS_UPDATED');
           return serverData;
         }
@@ -203,18 +193,6 @@ export async function fetchAccountsFromServer(): Promise<UserProfile[]> {
 }
 
 if (typeof window !== 'undefined') {
-  try {
-    const raw = localStorage.getItem(ACCOUNTS_STORAGE_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        accountsCache = parsed;
-      }
-    }
-  } catch {}
-  if (accountsCache.length === 0) {
-    accountsCache = [...INITIAL_ACCOUNTS];
-  }
   initAccountsFirestoreRealtimeSync();
   fetchAccountsFromServer().catch(() => {});
 }
@@ -223,66 +201,21 @@ export function getAllAccounts(): UserProfile[] {
   if (accountsCache.length > 0) {
     return accountsCache;
   }
-  if (typeof window === 'undefined') return INITIAL_ACCOUNTS;
-  try {
-    const raw = localStorage.getItem(ACCOUNTS_STORAGE_KEY);
-    if (!raw) {
-      localStorage.setItem(ACCOUNTS_STORAGE_KEY, JSON.stringify(INITIAL_ACCOUNTS));
-      accountsCache = [...INITIAL_ACCOUNTS];
-      return INITIAL_ACCOUNTS;
-    }
-    const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed) && parsed.length > 0) {
-      accountsCache = parsed;
-      return parsed;
-    }
-    localStorage.setItem(ACCOUNTS_STORAGE_KEY, JSON.stringify(INITIAL_ACCOUNTS));
-    accountsCache = [...INITIAL_ACCOUNTS];
-    return INITIAL_ACCOUNTS;
-  } catch (err) {
-    console.error('Error reading accounts from localStorage:', err);
-    return INITIAL_ACCOUNTS;
-  }
+  return INITIAL_ACCOUNTS;
 }
 
 export function saveAllAccounts(accounts: UserProfile[]): void {
   accountsCache = accounts;
-  if (typeof window === 'undefined') return;
-  try {
-    localStorage.setItem(ACCOUNTS_STORAGE_KEY, JSON.stringify(accounts));
-    notifyAuthChange('ACCOUNTS_UPDATED');
-  } catch (err) {
-    console.error('Error saving accounts to localStorage:', err);
-  }
+  notifyAuthChange('ACCOUNTS_UPDATED');
 }
 
 export function getCurrentUser(): UserProfile | null {
-  if (typeof window === 'undefined') return null;
-  try {
-    const raw = localStorage.getItem(CURRENT_USER_KEY);
-    if (!raw) {
-      // Guests scanning QR codes or unauthenticated visitors are NOT automatically signed in as developer
-      return null;
-    }
-    return JSON.parse(raw);
-  } catch (err) {
-    console.error('Error reading current user from localStorage:', err);
-    return null;
-  }
+  return currentLoggedUser;
 }
 
 export function setCurrentUser(user: UserProfile | null): void {
-  if (typeof window === 'undefined') return;
-  try {
-    if (user) {
-      localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(user));
-    } else {
-      localStorage.removeItem(CURRENT_USER_KEY);
-    }
-    notifyAuthChange('AUTH_STATE_CHANGED', { user });
-  } catch (err) {
-    console.error('Error saving current user to localStorage:', err);
-  }
+  currentLoggedUser = user;
+  notifyAuthChange('AUTH_STATE_CHANGED', { user });
 }
 
 export function login(
@@ -586,21 +519,13 @@ export function subscribeToAuthEvents(
     }
   };
 
-  const handleStorage = (e: StorageEvent) => {
-    if (e.key === ACCOUNTS_STORAGE_KEY || e.key === CURRENT_USER_KEY) {
-      callback({ type: 'AUTH_STORAGE_SYNC' });
-    }
-  };
-
   if (authBroadcastChannel) {
     authBroadcastChannel.addEventListener('message', handleMessage);
   }
-  window.addEventListener('storage', handleStorage);
 
   return () => {
     if (authBroadcastChannel) {
       authBroadcastChannel.removeEventListener('message', handleMessage);
     }
-    window.removeEventListener('storage', handleStorage);
   };
 }
