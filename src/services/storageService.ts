@@ -105,8 +105,15 @@ export async function fetchRequestsFromServer(): Promise<HotelRequest[]> {
     if (res.ok) {
       const serverData = await res.json();
       if (Array.isArray(serverData)) {
+        const prevMap = new Map(inMemoryCache.map((r) => [r.id, r]));
+        // Detect newly arrived requests that were not previously in memory and are in 'NEW' status
+        const newlyArrivedRequests = isInitialFetchDone
+          ? serverData.filter((r) => !prevMap.has(r.id) && r.status === 'NEW')
+          : [];
+
         const prevJson = JSON.stringify(inMemoryCache);
         const newJson = JSON.stringify(serverData);
+
         if (prevJson !== newJson || !isInitialFetchDone) {
           inMemoryCache = serverData;
           isInitialFetchDone = true;
@@ -114,7 +121,13 @@ export async function fetchRequestsFromServer(): Promise<HotelRequest[]> {
             localStorage.setItem(STORAGE_KEY, newJson);
           } catch {}
 
-          notifyListeners({ type: 'REQUESTS_UPDATED' });
+          if (newlyArrivedRequests.length > 0) {
+            newlyArrivedRequests.forEach((item) => {
+              notifyListeners({ type: 'NEW_REQUEST_SUBMITTED', request: item });
+            });
+          } else {
+            notifyListeners({ type: 'REQUESTS_UPDATED' });
+          }
         }
         return serverData;
       }

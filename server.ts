@@ -17,6 +17,25 @@ interface HotelRequest {
   completedByStaffName?: string;
 }
 
+interface UserProfile {
+  id: string;
+  username: string;
+  password?: string;
+  name: string;
+  email: string;
+  role: 'developer' | 'staff';
+  roleTitle: string;
+  department: string;
+  phone: string;
+  shift: string;
+  bio: string;
+  avatarColor: string;
+  isPrimaryDeveloper?: boolean;
+  dutyStatus: 'ON_DUTY' | 'ON_BREAK' | 'OFF_DUTY';
+  createdAt: number;
+  lastLoginAt?: number;
+}
+
 const INITIAL_REQUESTS: HotelRequest[] = [
   {
     id: 'req-init-101',
@@ -59,8 +78,84 @@ const INITIAL_REQUESTS: HotelRequest[] = [
   },
 ];
 
+const INITIAL_ACCOUNTS: UserProfile[] = [
+  {
+    id: 'user-dev-admin',
+    username: 'developer',
+    password: 'password123',
+    name: 'Alex Rivera (Lead Developer)',
+    email: 'developer@madigunhotel.com',
+    role: 'developer',
+    roleTitle: 'Lead Developer & Primary Admin',
+    department: 'IT & System Administration',
+    phone: '+1 (555) 019-8234',
+    shift: 'All Access / 24/7 DevOps',
+    bio: 'Primary developer account with full authority to provision employee accounts, modify all profiles, inspect real-time logs, and manage system operations.',
+    avatarColor: '#C5A880',
+    isPrimaryDeveloper: true,
+    dutyStatus: 'ON_DUTY',
+    createdAt: Date.now() - 1000 * 60 * 60 * 24 * 30,
+    lastLoginAt: Date.now(),
+  },
+  {
+    id: 'user-staff-sarah',
+    username: 'sarah.frontdesk',
+    password: 'password123',
+    name: 'Sarah Jenkins',
+    email: 'sarah.j@madigunhotel.com',
+    role: 'staff',
+    roleTitle: 'Front Desk Supervisor',
+    department: 'Front Desk',
+    phone: '+1 (555) 012-4411',
+    shift: 'Day Shift (07:00 - 15:30)',
+    bio: 'Senior guest relations concierge specializing in fast room assistance, check-in hospitality, and VIP guest accommodations.',
+    avatarColor: '#3B82F6',
+    isPrimaryDeveloper: false,
+    dutyStatus: 'ON_DUTY',
+    createdAt: Date.now() - 1000 * 60 * 60 * 24 * 14,
+    lastLoginAt: Date.now() - 1000 * 60 * 30,
+  },
+  {
+    id: 'user-staff-elena',
+    username: 'elena.housekeeping',
+    password: 'password123',
+    name: 'Elena Rostova',
+    email: 'elena.r@madigunhotel.com',
+    role: 'staff',
+    roleTitle: 'Housekeeping Supervisor',
+    department: 'Housekeeping',
+    phone: '+1 (555) 014-9922',
+    shift: 'Morning Shift (08:00 - 16:30)',
+    bio: 'Supervising in-room linens, complimentary supplies, hygiene protocols, and rapid turnover cleaning services.',
+    avatarColor: '#10B981',
+    isPrimaryDeveloper: false,
+    dutyStatus: 'ON_DUTY',
+    createdAt: Date.now() - 1000 * 60 * 60 * 24 * 10,
+    lastLoginAt: Date.now() - 1000 * 60 * 120,
+  },
+  {
+    id: 'user-staff-marcus',
+    username: 'marcus.maintenance',
+    password: 'password123',
+    name: 'Marcus Chen',
+    email: 'marcus.c@madigunhotel.com',
+    role: 'staff',
+    roleTitle: 'Chief Maintenance Engineer',
+    department: 'Maintenance & Engineering',
+    phone: '+1 (555) 017-3388',
+    shift: 'Evening Shift (14:00 - 22:30)',
+    bio: 'Managing room air conditioning, plumbing, lighting fixtures, and technical guest room diagnostics.',
+    avatarColor: '#F59E0B',
+    isPrimaryDeveloper: false,
+    dutyStatus: 'OFF_DUTY',
+    createdAt: Date.now() - 1000 * 60 * 60 * 24 * 7,
+    lastLoginAt: Date.now() - 1000 * 60 * 60 * 8,
+  },
+];
+
 const DATA_DIR = path.join(process.cwd(), '.data');
 const DATA_FILE = path.join(DATA_DIR, 'requests.json');
+const ACCOUNTS_FILE = path.join(DATA_DIR, 'accounts.json');
 
 function loadRequestsFromFile(): HotelRequest[] {
   try {
@@ -91,10 +186,52 @@ function saveRequestsToFile(requests: HotelRequest[]) {
   }
 }
 
+function loadAccountsFromFile(): UserProfile[] {
+  try {
+    if (!fs.existsSync(DATA_DIR)) {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+    }
+    if (fs.existsSync(ACCOUNTS_FILE)) {
+      const content = fs.readFileSync(ACCOUNTS_FILE, 'utf-8');
+      const parsed = JSON.parse(content);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed;
+      }
+    }
+  } catch (err) {
+    console.error('[Storage] Error loading accounts from file:', err);
+  }
+  return [...INITIAL_ACCOUNTS];
+}
+
+function saveAccountsToFile(accounts: UserProfile[]) {
+  try {
+    if (!fs.existsSync(DATA_DIR)) {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+    }
+    fs.writeFileSync(ACCOUNTS_FILE, JSON.stringify(accounts, null, 2), 'utf-8');
+  } catch (err) {
+    console.error('[Storage] Error saving accounts to file:', err);
+  }
+}
+
 let inMemoryRequests: HotelRequest[] = loadRequestsFromFile();
+let inMemoryAccounts: UserProfile[] = loadAccountsFromFile();
 const sseClients: express.Response[] = [];
 
-function broadcastSSE(event: { type: string; request?: HotelRequest; timestamp: number }) {
+// SSE Keep-alive heartbeat every 15 seconds
+setInterval(() => {
+  for (let i = sseClients.length - 1; i >= 0; i--) {
+    const client = sseClients[i];
+    try {
+      client.write(': keepalive\n\n');
+    } catch {
+      sseClients.splice(i, 1);
+    }
+  }
+}, 15000);
+
+function broadcastSSE(event: { type: string; request?: HotelRequest; account?: UserProfile; timestamp: number }) {
   const dataString = `data: ${JSON.stringify(event)}\n\n`;
   for (let i = sseClients.length - 1; i >= 0; i--) {
     const client = sseClients[i];
@@ -125,10 +262,18 @@ async function startServer() {
 
   // API Routes
   app.get('/api/health', (req, res) => {
-    res.json({ status: 'ok', count: inMemoryRequests.length, time: new Date().toISOString() });
+    res.json({
+      status: 'ok',
+      requestsCount: inMemoryRequests.length,
+      accountsCount: inMemoryAccounts.length,
+      sseClients: sseClients.length,
+      time: new Date().toISOString(),
+    });
   });
 
-  // Get all requests
+  // -------------------------------------------------------------
+  // Requests Endpoints
+  // -------------------------------------------------------------
   app.get('/api/requests', (req, res) => {
     res.json(inMemoryRequests);
   });
@@ -179,13 +324,10 @@ async function startServer() {
   app.post('/api/requests/sync', (req, res) => {
     const { requests } = req.body;
     if (Array.isArray(requests)) {
-      // Merge requests
       const mergedMap = new Map<string, HotelRequest>();
-      // First put incoming
       requests.forEach((r) => {
         if (r && r.id) mergedMap.set(r.id, r);
       });
-      // Merge with existing
       inMemoryRequests.forEach((r) => {
         if (!mergedMap.has(r.id)) {
           mergedMap.set(r.id, r);
@@ -268,11 +410,129 @@ async function startServer() {
     res.json(inMemoryRequests);
   });
 
-  // Real-time Server-Sent Events (SSE) stream for instant front desk updates
+  // -------------------------------------------------------------
+  // Accounts Endpoints (Multi-Device Sync)
+  // -------------------------------------------------------------
+  app.get('/api/accounts', (req, res) => {
+    res.json(inMemoryAccounts);
+  });
+
+  app.post('/api/accounts', (req, res) => {
+    const account = req.body;
+    if (!account || !account.username || !account.name) {
+      res.status(400).json({ error: 'Username and name are required' });
+      return;
+    }
+    const cleanUsername = String(account.username).trim().toLowerCase();
+    const exists = inMemoryAccounts.some((a) => a.username.toLowerCase() === cleanUsername);
+    if (exists) {
+      res.status(409).json({ error: `Account with username "${account.username}" already exists.` });
+      return;
+    }
+
+    const newAccount: UserProfile = {
+      ...account,
+      id: account.id || `user-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      username: cleanUsername,
+      name: String(account.name).trim(),
+      email: account.email ? String(account.email).trim() : `${cleanUsername}@madigunhotel.com`,
+      role: account.role === 'developer' ? 'developer' : 'staff',
+      roleTitle: account.roleTitle || (account.role === 'developer' ? 'Developer' : 'Staff Concierge'),
+      department: account.department || 'Front Desk',
+      phone: account.phone || '+1 (555) 000-0000',
+      shift: account.shift || 'Standard Shift',
+      bio: account.bio || 'Madigun Hotel team member.',
+      avatarColor: account.avatarColor || '#3B82F6',
+      dutyStatus: account.dutyStatus || 'ON_DUTY',
+      isPrimaryDeveloper: Boolean(account.isPrimaryDeveloper),
+      createdAt: typeof account.createdAt === 'number' ? account.createdAt : Date.now(),
+    };
+
+    inMemoryAccounts = [newAccount, ...inMemoryAccounts];
+    saveAccountsToFile(inMemoryAccounts);
+
+    broadcastSSE({
+      type: 'ACCOUNTS_UPDATED',
+      account: newAccount,
+      timestamp: Date.now(),
+    });
+
+    res.status(201).json(newAccount);
+  });
+
+  app.patch('/api/accounts/:id', (req, res) => {
+    const { id } = req.params;
+    const updates = req.body;
+
+    const idx = inMemoryAccounts.findIndex((a) => a.id === id);
+    if (idx === -1) {
+      res.status(404).json({ error: 'Account not found' });
+      return;
+    }
+
+    const target = inMemoryAccounts[idx];
+    const updated: UserProfile = {
+      ...target,
+      ...updates,
+      isPrimaryDeveloper: target.isPrimaryDeveloper, // Protect primary dev status
+      role: target.isPrimaryDeveloper ? 'developer' : (updates.role ?? target.role),
+    };
+
+    inMemoryAccounts[idx] = updated;
+    saveAccountsToFile(inMemoryAccounts);
+
+    broadcastSSE({
+      type: 'ACCOUNTS_UPDATED',
+      account: updated,
+      timestamp: Date.now(),
+    });
+
+    res.json(updated);
+  });
+
+  app.delete('/api/accounts/:id', (req, res) => {
+    const { id } = req.params;
+    const target = inMemoryAccounts.find((a) => a.id === id);
+    if (!target) {
+      res.status(404).json({ error: 'Account not found' });
+      return;
+    }
+    if (target.isPrimaryDeveloper) {
+      res.status(403).json({ error: 'Primary developer account cannot be deleted.' });
+      return;
+    }
+
+    inMemoryAccounts = inMemoryAccounts.filter((a) => a.id !== id);
+    saveAccountsToFile(inMemoryAccounts);
+
+    broadcastSSE({
+      type: 'ACCOUNTS_UPDATED',
+      timestamp: Date.now(),
+    });
+
+    res.json({ success: true });
+  });
+
+  app.post('/api/accounts/reset', (req, res) => {
+    inMemoryAccounts = [...INITIAL_ACCOUNTS];
+    saveAccountsToFile(inMemoryAccounts);
+
+    broadcastSSE({
+      type: 'ACCOUNTS_UPDATED',
+      timestamp: Date.now(),
+    });
+
+    res.json(inMemoryAccounts);
+  });
+
+  // -------------------------------------------------------------
+  // Real-time Server-Sent Events (SSE) stream for instant sync
+  // -------------------------------------------------------------
   app.get('/api/events', (req, res) => {
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache, no-transform');
     res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
     res.flushHeaders?.();
 
     // Initial connection ping

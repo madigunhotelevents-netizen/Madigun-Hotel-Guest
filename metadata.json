@@ -1,6 +1,6 @@
 {
   "name": "Hotel Guest System",
-  "description": "QR-based hotel guest assistance, front desk concierge dispatch, Google Drive cloud server storage sync & backups, employee authentication, and developer account management directory for Madigun Hotel & Events.",
+  "description": "QR-based hotel guest assistance, real-time front desk concierge dispatch, employee authentication, and multi-room management directory for Madigun Hotel & Events.",
   "requestFramePermissions": [],
   "majorCapabilities": [
     "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"

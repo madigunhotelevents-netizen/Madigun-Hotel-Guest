@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   Bell,
   CheckCircle2,
@@ -22,7 +22,6 @@ import {
   Trash2,
   Moon,
   Sun,
-  Cloud,
 } from 'lucide-react';
 import { HotelRequest, RequestStatus, UserProfile } from '../types/hotel';
 import {
@@ -36,7 +35,6 @@ import {
 } from '../services/storageService';
 import { playConciergeBell, playUrgentAlert, playSuccessChime } from '../services/soundService';
 import { useServiceSchedule } from '../services/scheduleService';
-import { getDriveStatus } from '../services/googleDriveService';
 
 interface FrontDeskViewProps {
   soundEnabled: boolean;
@@ -44,7 +42,6 @@ interface FrontDeskViewProps {
   onNavigateToGuest?: (room: string) => void;
   currentUser?: UserProfile | null;
   onOpenLoginModal?: () => void;
-  onOpenGoogleDrive?: () => void;
 }
 
 export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
@@ -53,7 +50,6 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
   onNavigateToGuest,
   currentUser,
   onOpenLoginModal,
-  onOpenGoogleDrive,
 }) => {
   const [requests, setRequests] = useState<HotelRequest[]>([]);
   const [statusFilter, setStatusFilter] = useState<'ACTIVE' | 'NEW' | 'IN_PROGRESS' | 'COMPLETED' | 'ALL'>('ACTIVE');
@@ -270,18 +266,6 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
 
         {/* Quick Toolbar */}
         <div className="flex flex-wrap items-center gap-2">
-          {onOpenGoogleDrive && (
-            <button
-              type="button"
-              onClick={onOpenGoogleDrive}
-              className="text-xs px-3 py-1.5 rounded-md bg-[#1F1E1B] hover:bg-[#2C2924] border border-[#3E3A33] text-[#D8D2C7] hover:text-[#F3EFEA] transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
-              title="Open Google Drive Cloud Storage & Backups"
-            >
-              <Cloud className={`w-3.5 h-3.5 ${getDriveStatus().connected ? 'text-[#22C55E]' : 'text-[#C5A880]'}`} />
-              <span>{getDriveStatus().connected ? 'Drive Cloud: Active' : 'Google Drive'}</span>
-            </button>
-          )}
-
           {notificationPermission !== 'granted' && typeof window !== 'undefined' && 'Notification' in window && (
             <button
               type="button"

@@ -9,7 +9,6 @@ import { GuestView } from './components/GuestView';
 import { FrontDeskView } from './components/FrontDeskView';
 import { QRManagementView } from './components/QRManagementView';
 import { AccountsManagementView } from './components/AccountsManagementView';
-import { GoogleDriveModal } from './components/GoogleDriveModal';
 import { LoginModal } from './components/LoginModal';
 import { ProfileModal } from './components/ProfileModal';
 import { getStoredRequests, subscribeToRequestEvents } from './services/storageService';
@@ -33,7 +32,6 @@ export default function App() {
   // Modal states
   const [isLoginModalOpen, setIsLoginModalOpen] = useState<boolean>(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState<boolean>(false);
-  const [isGoogleDriveModalOpen, setIsGoogleDriveModalOpen] = useState<boolean>(false);
 
   // Helper to extract room number and view mode from URL params, paths, and hashes
   const parseUrlState = () => {
@@ -232,7 +230,6 @@ export default function App() {
         onOpenProfile={() => setIsProfileModalOpen(true)}
         onLogout={handleLogout}
         onSetDutyStatus={handleSetDutyStatus}
-        onOpenGoogleDrive={() => setIsGoogleDriveModalOpen(true)}
       />
 
       {/* Main Content Body */}
@@ -252,14 +249,12 @@ export default function App() {
             onNavigateToGuest={handleNavigateToGuestForRoom}
             currentUser={currentUser}
             onOpenLoginModal={() => setIsLoginModalOpen(true)}
-            onOpenGoogleDrive={() => setIsGoogleDriveModalOpen(true)}
           />
         )}
 
         {activeTab === 'accounts' && (
           <AccountsManagementView
             onOpenLoginModal={() => setIsLoginModalOpen(true)}
-            onOpenGoogleDrive={() => setIsGoogleDriveModalOpen(true)}
           />
         )}
 
@@ -271,15 +266,6 @@ export default function App() {
       </main>
 
       {/* Global Modals */}
-      <GoogleDriveModal
-        isOpen={isGoogleDriveModalOpen}
-        onClose={() => setIsGoogleDriveModalOpen(false)}
-        currentUser={currentUser}
-        onDataRestored={() => {
-          updateCounts();
-        }}
-      />
-
       <LoginModal
         isOpen={isLoginModalOpen}
         onClose={() => setIsLoginModalOpen(false)}

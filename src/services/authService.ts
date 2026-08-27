@@ -94,26 +94,69 @@ function notifyAuthChange(type: string, data?: any) {
   }
 }
 
+let accountsCache: UserProfile[] = [];
+let isAccountsInitialFetchDone = false;
+
+// Background fetch accounts from server
+export async function fetchAccountsFromServer(): Promise<UserProfile[]> {
+  try {
+    const res = await fetch('/api/accounts', {
+      headers: { 'Accept': 'application/json' },
+      cache: 'no-store',
+    });
+    if (res.ok) {
+      const serverData = await res.json();
+      if (Array.isArray(serverData) && serverData.length > 0) {
+        accountsCache = serverData;
+        isAccountsInitialFetchDone = true;
+        try {
+          localStorage.setItem(ACCOUNTS_STORAGE_KEY, JSON.stringify(serverData));
+        } catch {}
+        notifyAuthChange('ACCOUNTS_UPDATED');
+        return serverData;
+      }
+    }
+  } catch (err) {
+    // Fall back to local
+  }
+  return accountsCache.length > 0 ? accountsCache : INITIAL_ACCOUNTS;
+}
+
+if (typeof window !== 'undefined') {
+  try {
+    const raw = localStorage.getItem(ACCOUNTS_STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        accountsCache = parsed;
+      }
+    }
+  } catch {}
+  if (accountsCache.length === 0) {
+    accountsCache = [...INITIAL_ACCOUNTS];
+  }
+  fetchAccountsFromServer().catch(() => {});
+}
+
 export function getAllAccounts(): UserProfile[] {
+  if (accountsCache.length > 0) {
+    return accountsCache;
+  }
   if (typeof window === 'undefined') return INITIAL_ACCOUNTS;
   try {
     const raw = localStorage.getItem(ACCOUNTS_STORAGE_KEY);
     if (!raw) {
       localStorage.setItem(ACCOUNTS_STORAGE_KEY, JSON.stringify(INITIAL_ACCOUNTS));
+      accountsCache = [...INITIAL_ACCOUNTS];
       return INITIAL_ACCOUNTS;
     }
     const parsed = JSON.parse(raw);
     if (Array.isArray(parsed) && parsed.length > 0) {
-      // Ensure primary developer account is always present
-      const hasDev = parsed.some((u) => u.isPrimaryDeveloper || u.role === 'developer');
-      if (!hasDev) {
-        const merged = [INITIAL_ACCOUNTS[0], ...parsed];
-        localStorage.setItem(ACCOUNTS_STORAGE_KEY, JSON.stringify(merged));
-        return merged;
-      }
+      accountsCache = parsed;
       return parsed;
     }
     localStorage.setItem(ACCOUNTS_STORAGE_KEY, JSON.stringify(INITIAL_ACCOUNTS));
+    accountsCache = [...INITIAL_ACCOUNTS];
     return INITIAL_ACCOUNTS;
   } catch (err) {
     console.error('Error reading accounts from localStorage:', err);
@@ -122,6 +165,7 @@ export function getAllAccounts(): UserProfile[] {
 }
 
 export function saveAllAccounts(accounts: UserProfile[]): void {
+  accountsCache = accounts;
   if (typeof window === 'undefined') return;
   try {
     localStorage.setItem(ACCOUNTS_STORAGE_KEY, JSON.stringify(accounts));
@@ -132,14 +176,12 @@ export function saveAllAccounts(accounts: UserProfile[]): void {
 }
 
 export function getCurrentUser(): UserProfile | null {
-  if (typeof window === 'undefined') return INITIAL_ACCOUNTS[0];
+  if (typeof window === 'undefined') return null;
   try {
     const raw = localStorage.getItem(CURRENT_USER_KEY);
     if (!raw) {
-      // Default to Primary Developer account for instant convenience, but allows logging out / switching
-      const defaultUser = INITIAL_ACCOUNTS[0];
-      localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(defaultUser));
-      return defaultUser;
+      // Guests scanning QR codes or unauthenticated visitors are NOT automatically signed in as developer
+      return null;
     }
     return JSON.parse(raw);
   } catch (err) {
@@ -260,6 +302,15 @@ export function createAccount(
   const updated = [created, ...accounts];
   saveAllAccounts(updated);
 
+  // Sync with server API
+  fetch('/api/accounts', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(created),
+  }).catch((err) => {
+    console.warn('Network error while saving account to server:', err);
+  });
+
   return { success: true, account: created };
 }
 
@@ -315,6 +366,15 @@ export function updateAccount(
   const updatedList = accounts.map((a) => (a.id === accountId ? updatedAccount : a));
   saveAllAccounts(updatedList);
 
+  // Sync update with server API
+  fetch(`/api/accounts/${encodeURIComponent(accountId)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(updatedAccount),
+  }).catch((err) => {
+    console.warn('Network error while updating account on server:', err);
+  });
+
   // If actor edited their own profile, sync current user session
   if (isSelf) {
     setCurrentUser(updatedAccount);
@@ -351,6 +411,13 @@ export function deleteAccount(
   const updatedList = accounts.filter((a) => a.id !== accountId);
   saveAllAccounts(updatedList);
 
+  // Sync delete with server API
+  fetch(`/api/accounts/${encodeURIComponent(accountId)}`, {
+    method: 'DELETE',
+  }).catch((err) => {
+    console.warn('Network error while deleting account on server:', err);
+  });
+
   return { success: true };
 }
 
@@ -366,6 +433,13 @@ export function setDutyStatus(
   const updatedList = accounts.map((a) => (a.id === userId ? updated : a));
   saveAllAccounts(updatedList);
 
+  // Sync duty status to server
+  fetch(`/api/accounts/${encodeURIComponent(userId)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ dutyStatus: status }),
+  }).catch(() => {});
+
   const cur = getCurrentUser();
   if (cur && cur.id === userId) {
     setCurrentUser(updated);
@@ -376,7 +450,12 @@ export function setDutyStatus(
 
 export function resetToDemoAccounts(): UserProfile[] {
   saveAllAccounts(INITIAL_ACCOUNTS);
-  setCurrentUser(INITIAL_ACCOUNTS[0]);
+  setCurrentUser(null);
+
+  fetch('/api/accounts/reset', {
+    method: 'POST',
+  }).catch(() => {});
+
   return INITIAL_ACCOUNTS;
 }
 
