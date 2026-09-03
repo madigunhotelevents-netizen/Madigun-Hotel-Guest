@@ -208,9 +208,6 @@ export const QRManagementView: React.FC<QRManagementViewProps> = ({ onTestRoom }
           <h1 className="text-2xl sm:text-3xl font-bold font-serif-luxury text-[#F3EFEA]">
             Room QR Codes &amp; Access Keys
           </h1>
-          <p className="text-xs sm:text-sm text-[#9E978C] mt-0.5">
-            Generate and print luxury stand cards with dynamic passcode validation for guest rooms and suites.
-          </p>
         </div>
 
         {/* Print & Export Actions */}

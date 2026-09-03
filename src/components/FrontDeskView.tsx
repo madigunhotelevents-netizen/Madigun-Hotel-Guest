@@ -303,9 +303,6 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
               First-Come, First-Served (FIFO)
             </span>
           </h1>
-          <p className="text-xs sm:text-sm text-[#A89F91] mt-1">
-            Requests are ordered chronologically from oldest to newest. Accept requests to assign dedicated staff personnel.
-          </p>
         </div>
 
         {/* Action Controls */}
@@ -371,9 +368,6 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
                   Room Stay Status &amp; Digital Checkout Access Control
                 </h3>
               </div>
-              <p className="text-xs text-[#A89F91] mt-0.5">
-                When a guest checks out, mark their room as <strong>Checked Out</strong>. Any scanned QR code or saved link for that room will immediately show a vacant room notice and prevent guest submissions.
-              </p>
             </div>
             <button
               type="button"

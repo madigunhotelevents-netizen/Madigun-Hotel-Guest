@@ -229,7 +229,7 @@ export const RoomOccupancyView: React.FC<RoomOccupancyViewProps> = ({
 
   // Actions
   const handleCheckOut = (roomNumber: string) => {
-    const updated = checkOutRoom(roomNumber);
+    const updated = checkOutRoom(roomNumber, currentUser?.name);
     refreshData();
     showToast(`Room ${roomNumber} has been Checked Out. Guest access code expired.`);
     if (activeKeycardModal?.roomNumber === roomNumber) {
@@ -247,7 +247,7 @@ export const RoomOccupancyView: React.FC<RoomOccupancyViewProps> = ({
   const handleConfirmCheckIn = () => {
     if (!checkInModalRoom) return;
     const name = checkInGuestName.trim() || `In-Room Guest`;
-    const newStay = checkInRoom(checkInModalRoom.roomNumber, name);
+    const newStay = checkInRoom(checkInModalRoom.roomNumber, name, undefined, currentUser?.name);
     refreshData();
     showToast(`Checked in Room ${checkInModalRoom.roomNumber} with new code: ${newStay.accessCode}`);
     setCheckInModalRoom(null);

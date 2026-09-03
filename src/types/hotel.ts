@@ -57,6 +57,24 @@ export interface RoomStay {
   notes?: string;
 }
 
+export interface StayLogRecord {
+  id: string;
+  roomNumber: string;
+  guestName: string;
+  accessCode?: string;
+  floor: number;
+  roomType: string;
+  bedType: string;
+  checkInAt: number;
+  checkOutAt?: number;
+  durationMs?: number;
+  status: 'ACTIVE' | 'CHECKED_OUT';
+  checkedInByStaff?: string;
+  checkedOutByStaff?: string;
+  notes?: string;
+  createdAt: number;
+}
+
 export type UserRole = 'developer' | 'staff';
 
 export type DutyStatus = 'ON_DUTY' | 'ON_BREAK' | 'OFF_DUTY';

@@ -36,6 +36,64 @@ interface UserProfile {
   lastLoginAt?: number;
 }
 
+interface RoomStay {
+  roomNumber: string;
+  status: 'OCCUPIED' | 'CHECKED_OUT';
+  accessCode?: string;
+  guestName?: string;
+  floor: number;
+  roomType: string;
+  bedType: string;
+  checkInAt?: number;
+  checkOutAt?: number;
+  notes?: string;
+  lastUpdated: number;
+}
+
+const INITIAL_ROOM_STAYS: RoomStay[] = [
+  // Floor 1
+  { roomNumber: '101', status: 'CHECKED_OUT', floor: 1, roomType: 'Deluxe King Room', bedType: '1 King Bed', lastUpdated: Date.now() },
+  { roomNumber: '102', status: 'CHECKED_OUT', floor: 1, roomType: 'Deluxe Double Queen', bedType: '2 Queen Beds', lastUpdated: Date.now() },
+  { roomNumber: '103', status: 'CHECKED_OUT', floor: 1, roomType: 'Deluxe King Room', bedType: '1 King Bed', lastUpdated: Date.now() },
+  { roomNumber: '104', status: 'CHECKED_OUT', floor: 1, roomType: 'Superior Twin Room', bedType: '2 Twin Beds', lastUpdated: Date.now() },
+  { roomNumber: '105', status: 'CHECKED_OUT', floor: 1, roomType: 'Deluxe King Room', bedType: '1 King Bed', lastUpdated: Date.now() },
+  { roomNumber: '106', status: 'CHECKED_OUT', floor: 1, roomType: 'Deluxe Double Queen', bedType: '2 Queen Beds', lastUpdated: Date.now() },
+  { roomNumber: '107', status: 'CHECKED_OUT', floor: 1, roomType: 'Deluxe King Room', bedType: '1 King Bed', lastUpdated: Date.now() },
+  { roomNumber: '108', status: 'CHECKED_OUT', floor: 1, roomType: 'Superior King Room', bedType: '1 King Bed', lastUpdated: Date.now() },
+  { roomNumber: '109', status: 'CHECKED_OUT', floor: 1, roomType: 'Deluxe Double Queen', bedType: '2 Queen Beds', lastUpdated: Date.now() },
+  { roomNumber: '110', status: 'CHECKED_OUT', floor: 1, roomType: 'Executive Suite', bedType: '1 King + Sofa Bed', lastUpdated: Date.now() },
+
+  // Floor 2
+  { roomNumber: '201', status: 'CHECKED_OUT', floor: 2, roomType: 'Deluxe King Room', bedType: '1 King Bed', lastUpdated: Date.now() },
+  { roomNumber: '202', status: 'CHECKED_OUT', floor: 2, roomType: 'Deluxe King Room', bedType: '1 King Bed', lastUpdated: Date.now() },
+  { roomNumber: '203', status: 'CHECKED_OUT', floor: 2, roomType: 'Deluxe Double Queen', bedType: '2 Queen Beds', lastUpdated: Date.now() },
+  { roomNumber: '204', status: 'CHECKED_OUT', floor: 2, roomType: 'Deluxe King Room', bedType: '1 King Bed', lastUpdated: Date.now() },
+  { roomNumber: '205', status: 'CHECKED_OUT', floor: 2, roomType: 'Executive King Suite', bedType: '1 King Bed', lastUpdated: Date.now() },
+  { roomNumber: '206', status: 'CHECKED_OUT', floor: 2, roomType: 'Superior Twin Room', bedType: '2 Twin Beds', lastUpdated: Date.now() },
+  { roomNumber: '207', status: 'CHECKED_OUT', floor: 2, roomType: 'Deluxe Double Queen', bedType: '2 Queen Beds', lastUpdated: Date.now() },
+  { roomNumber: '208', status: 'CHECKED_OUT', floor: 2, roomType: 'Deluxe King Room', bedType: '1 King Bed', lastUpdated: Date.now() },
+  { roomNumber: '209', status: 'CHECKED_OUT', floor: 2, roomType: 'Deluxe King Room', bedType: '1 King Bed', lastUpdated: Date.now() },
+  { roomNumber: '210', status: 'CHECKED_OUT', floor: 2, roomType: 'Junior Suite', bedType: '1 King + Lounge', lastUpdated: Date.now() },
+
+  // Floor 3
+  { roomNumber: '301', status: 'CHECKED_OUT', floor: 3, roomType: 'Deluxe King Room', bedType: '1 King Bed', lastUpdated: Date.now() },
+  { roomNumber: '302', status: 'CHECKED_OUT', floor: 3, roomType: 'Deluxe Double Queen', bedType: '2 Queen Beds', lastUpdated: Date.now() },
+  { roomNumber: '303', status: 'CHECKED_OUT', floor: 3, roomType: 'Deluxe King Room', bedType: '1 King Bed', lastUpdated: Date.now() },
+  { roomNumber: '304', status: 'CHECKED_OUT', floor: 3, roomType: 'Superior King Room', bedType: '1 King Bed', lastUpdated: Date.now() },
+  { roomNumber: '305', status: 'CHECKED_OUT', floor: 3, roomType: 'Deluxe Double Queen', bedType: '2 Queen Beds', lastUpdated: Date.now() },
+  { roomNumber: '306', status: 'CHECKED_OUT', floor: 3, roomType: 'Deluxe King Room', bedType: '1 King Bed', lastUpdated: Date.now() },
+  { roomNumber: '307', status: 'CHECKED_OUT', floor: 3, roomType: 'Superior Twin Room', bedType: '2 Twin Beds', lastUpdated: Date.now() },
+  { roomNumber: '308', status: 'CHECKED_OUT', floor: 3, roomType: 'Executive Suite', bedType: '1 King + Balcony', lastUpdated: Date.now() },
+  { roomNumber: '309', status: 'CHECKED_OUT', floor: 3, roomType: 'Deluxe Double Queen', bedType: '2 Queen Beds', lastUpdated: Date.now() },
+  { roomNumber: '310', status: 'CHECKED_OUT', floor: 3, roomType: 'Penthouse Junior', bedType: '1 King Bed', lastUpdated: Date.now() },
+
+  // Floor 4 & Suites
+  { roomNumber: '401', status: 'CHECKED_OUT', floor: 4, roomType: 'Presidential Royal Suite', bedType: 'Master Suite + Living', lastUpdated: Date.now() },
+  { roomNumber: '402', status: 'CHECKED_OUT', floor: 4, roomType: 'Madigun Signature Suite', bedType: '2 King Bedrooms', lastUpdated: Date.now() },
+  { roomNumber: '403', status: 'CHECKED_OUT', floor: 4, roomType: 'Skyline Terrace Suite', bedType: '1 King + Private Deck', lastUpdated: Date.now() },
+  { roomNumber: '404', status: 'CHECKED_OUT', floor: 4, roomType: 'Grand Ambassador Suite', bedType: 'Master Suite', lastUpdated: Date.now() },
+];
+
 const INITIAL_REQUESTS: HotelRequest[] = [
   {
     id: 'req-init-101',
@@ -156,6 +214,7 @@ const INITIAL_ACCOUNTS: UserProfile[] = [
 const DATA_DIR = path.join(process.cwd(), '.data');
 const DATA_FILE = path.join(DATA_DIR, 'requests.json');
 const ACCOUNTS_FILE = path.join(DATA_DIR, 'accounts.json');
+const ROOM_STAYS_FILE = path.join(DATA_DIR, 'room_stays.json');
 
 function loadRequestsFromFile(): HotelRequest[] {
   try {
@@ -215,8 +274,45 @@ function saveAccountsToFile(accounts: UserProfile[]) {
   }
 }
 
+function loadRoomStaysFromFile(): RoomStay[] {
+  try {
+    if (!fs.existsSync(DATA_DIR)) {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+    }
+    if (fs.existsSync(ROOM_STAYS_FILE)) {
+      const content = fs.readFileSync(ROOM_STAYS_FILE, 'utf-8');
+      const parsed = JSON.parse(content);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        // Ensure all default rooms are present in map
+        const map = new Map<string, RoomStay>(parsed.map((r: RoomStay) => [r.roomNumber, r]));
+        INITIAL_ROOM_STAYS.forEach((initStay) => {
+          if (!map.has(initStay.roomNumber)) {
+            map.set(initStay.roomNumber, initStay);
+          }
+        });
+        return Array.from(map.values());
+      }
+    }
+  } catch (err) {
+    console.error('[Storage] Error loading room stays from file:', err);
+  }
+  return [...INITIAL_ROOM_STAYS];
+}
+
+function saveRoomStaysToFile(stays: RoomStay[]) {
+  try {
+    if (!fs.existsSync(DATA_DIR)) {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+    }
+    fs.writeFileSync(ROOM_STAYS_FILE, JSON.stringify(stays, null, 2), 'utf-8');
+  } catch (err) {
+    console.error('[Storage] Error saving room stays to file:', err);
+  }
+}
+
 let inMemoryRequests: HotelRequest[] = loadRequestsFromFile();
 let inMemoryAccounts: UserProfile[] = loadAccountsFromFile();
+let inMemoryRoomStays: RoomStay[] = loadRoomStaysFromFile();
 const sseClients: express.Response[] = [];
 
 // SSE Keep-alive heartbeat every 15 seconds
@@ -523,6 +619,172 @@ async function startServer() {
     });
 
     res.json(inMemoryAccounts);
+  });
+
+  // -------------------------------------------------------------
+  // Room Stays & Occupancy Endpoints
+  // -------------------------------------------------------------
+  app.get('/api/room-stays', (req, res) => {
+    res.json(inMemoryRoomStays);
+  });
+
+  app.get('/api/room-stays/:roomNumber', (req, res) => {
+    const clean = String(req.params.roomNumber).trim();
+    const stay = inMemoryRoomStays.find((s) => s.roomNumber === clean);
+    if (!stay) {
+      const defaultRef = INITIAL_ROOM_STAYS.find((r) => r.roomNumber === clean);
+      const fallback: RoomStay = {
+        roomNumber: clean,
+        status: 'CHECKED_OUT',
+        floor: defaultRef?.floor || 1,
+        roomType: defaultRef?.roomType || 'Deluxe King Room',
+        bedType: defaultRef?.bedType || '1 King Bed',
+        lastUpdated: Date.now(),
+      };
+      res.json(fallback);
+      return;
+    }
+    res.json(stay);
+  });
+
+  // Check In room
+  app.post('/api/room-stays/checkin', (req, res) => {
+    const { roomNumber, guestName, accessCode } = req.body;
+    if (!roomNumber) {
+      res.status(400).json({ error: 'roomNumber is required' });
+      return;
+    }
+    const clean = String(roomNumber).trim();
+    const existing = inMemoryRoomStays.find((s) => s.roomNumber === clean);
+    const now = Date.now();
+    const code = accessCode || `MDG-${Math.floor(1000 + Math.random() * 9000)}`;
+
+    const updatedStay: RoomStay = {
+      roomNumber: clean,
+      status: 'OCCUPIED',
+      accessCode: code,
+      guestName: guestName || `Room ${clean} Guest`,
+      floor: existing?.floor || 1,
+      bedType: existing?.bedType || '1 King Bed',
+      roomType: existing?.roomType || 'Deluxe King Room',
+      checkInAt: now,
+      checkOutAt: undefined,
+      notes: existing?.notes,
+      lastUpdated: now,
+    };
+
+    const idx = inMemoryRoomStays.findIndex((s) => s.roomNumber === clean);
+    if (idx >= 0) {
+      inMemoryRoomStays[idx] = updatedStay;
+    } else {
+      inMemoryRoomStays.push(updatedStay);
+    }
+    saveRoomStaysToFile(inMemoryRoomStays);
+
+    broadcastSSE({
+      type: 'ROOM_STAY_UPDATED',
+      timestamp: now,
+    });
+
+    res.json(updatedStay);
+  });
+
+  // Check Out room (Crucial: sets status to CHECKED_OUT and invalidates accessCode)
+  app.post('/api/room-stays/checkout', (req, res) => {
+    const { roomNumber } = req.body;
+    if (!roomNumber) {
+      res.status(400).json({ error: 'roomNumber is required' });
+      return;
+    }
+    const clean = String(roomNumber).trim();
+    const existing = inMemoryRoomStays.find((s) => s.roomNumber === clean);
+    const now = Date.now();
+
+    const updatedStay: RoomStay = {
+      roomNumber: clean,
+      status: 'CHECKED_OUT',
+      accessCode: undefined, // Expired
+      guestName: existing?.guestName || `Room ${clean} Guest`,
+      floor: existing?.floor || 1,
+      bedType: existing?.bedType || '1 King Bed',
+      roomType: existing?.roomType || 'Deluxe King Room',
+      checkInAt: existing?.checkInAt,
+      checkOutAt: now,
+      notes: existing?.notes,
+      lastUpdated: now,
+    };
+
+    const idx = inMemoryRoomStays.findIndex((s) => s.roomNumber === clean);
+    if (idx >= 0) {
+      inMemoryRoomStays[idx] = updatedStay;
+    } else {
+      inMemoryRoomStays.push(updatedStay);
+    }
+    saveRoomStaysToFile(inMemoryRoomStays);
+
+    broadcastSSE({
+      type: 'ROOM_STAY_UPDATED',
+      timestamp: now,
+    });
+
+    res.json(updatedStay);
+  });
+
+  // Update room specs
+  app.patch('/api/room-stays/:roomNumber', (req, res) => {
+    const clean = String(req.params.roomNumber).trim();
+    const updates = req.body;
+    const existing = inMemoryRoomStays.find((s) => s.roomNumber === clean);
+    const now = Date.now();
+
+    const updatedStay: RoomStay = {
+      roomNumber: clean,
+      status: existing?.status || 'CHECKED_OUT',
+      accessCode: existing?.accessCode,
+      guestName: existing?.guestName,
+      floor: typeof updates.floor === 'number' ? updates.floor : (existing?.floor || 1),
+      bedType: updates.bedType !== undefined ? String(updates.bedType).trim() : (existing?.bedType || '1 King Bed'),
+      roomType: updates.roomType !== undefined ? String(updates.roomType).trim() : (existing?.roomType || 'Deluxe King Room'),
+      notes: updates.notes !== undefined ? String(updates.notes).trim() : existing?.notes,
+      checkInAt: existing?.checkInAt,
+      checkOutAt: existing?.checkOutAt,
+      lastUpdated: now,
+    };
+
+    const idx = inMemoryRoomStays.findIndex((s) => s.roomNumber === clean);
+    if (idx >= 0) {
+      inMemoryRoomStays[idx] = updatedStay;
+    } else {
+      inMemoryRoomStays.push(updatedStay);
+    }
+    saveRoomStaysToFile(inMemoryRoomStays);
+
+    broadcastSSE({
+      type: 'ROOM_STAY_UPDATED',
+      timestamp: now,
+    });
+
+    res.json(updatedStay);
+  });
+
+  // Bulk sync room stays
+  app.post('/api/room-stays/sync', (req, res) => {
+    const { roomStays } = req.body;
+    if (Array.isArray(roomStays)) {
+      const map = new Map<string, RoomStay>(inMemoryRoomStays.map((s) => [s.roomNumber, s]));
+      roomStays.forEach((s: RoomStay) => {
+        if (s && s.roomNumber) {
+          map.set(s.roomNumber, s);
+        }
+      });
+      inMemoryRoomStays = Array.from(map.values());
+      saveRoomStaysToFile(inMemoryRoomStays);
+      broadcastSSE({
+        type: 'ROOM_STAYS_UPDATED',
+        timestamp: Date.now(),
+      });
+    }
+    res.json(inMemoryRoomStays);
   });
 
   // -------------------------------------------------------------

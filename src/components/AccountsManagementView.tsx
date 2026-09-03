@@ -23,6 +23,7 @@ import {
   Building,
   KeyRound,
   FileText,
+  X,
 } from 'lucide-react';
 import { UserProfile, DutyStatus, UserRole, StaffMember } from '../types/hotel';
 import {
@@ -42,6 +43,7 @@ import {
 } from '../services/storageService';
 import { CreateAccountModal } from './CreateAccountModal';
 import { CreateStaffMemberModal } from './CreateStaffMemberModal';
+import { EditStaffMemberModal } from './EditStaffMemberModal';
 import { EditAccountModal } from './EditAccountModal';
 import { ProfileModal } from './ProfileModal';
 
@@ -67,8 +69,14 @@ export const AccountsManagementView: React.FC<AccountsManagementViewProps> = ({
   // Modals state
   const [isCreateAccountModalOpen, setIsCreateAccountModalOpen] = useState(false);
   const [isCreateStaffModalOpen, setIsCreateStaffModalOpen] = useState(false);
+  const [staffToEdit, setStaffToEdit] = useState<StaffMember | null>(null);
   const [accountToEdit, setAccountToEdit] = useState<UserProfile | null>(null);
   const [accountToViewProfile, setAccountToViewProfile] = useState<UserProfile | null>(null);
+  
+  // Direct deletion confirmations
+  const [staffIdToDelete, setStaffIdToDelete] = useState<string | null>(null);
+  const [accountIdToDelete, setAccountIdToDelete] = useState<string | null>(null);
+  
   const [notificationMsg, setNotificationMsg] = useState<{ type: 'success' | 'info' | 'error'; text: string } | null>(null);
 
   const loadData = () => {
@@ -96,7 +104,7 @@ export const AccountsManagementView: React.FC<AccountsManagementViewProps> = ({
     }, 3500);
   };
 
-  // Filtered Staff Roster (Associates without login accounts)
+  // Filtered Staff Roster
   const filteredStaffMembers = useMemo(() => {
     return staffMembers.filter((staff) => {
       if (departmentFilter !== 'ALL' && staff.department !== departmentFilter) return false;
@@ -167,15 +175,29 @@ export const AccountsManagementView: React.FC<AccountsManagementViewProps> = ({
     showToast('info', `Updated staff duty status to ${nextStatus.replace('_', ' ')}`);
   };
 
-  const handleDeleteStaff = (staffId: string, staffName: string) => {
+  const handleConfirmDeleteStaff = (staffId: string, staffName: string) => {
     if (!isDeveloper) {
       showToast('error', 'Only Administrators can remove staff members.');
       return;
     }
-    if (confirm(`Are you sure you want to remove "${staffName}" from the staff directory?`)) {
-      const updated = deleteStaffMember(staffId);
-      setStaffMembers(updated);
-      showToast('success', `Removed ${staffName} from staff roster.`);
+    const updated = deleteStaffMember(staffId);
+    setStaffMembers(updated);
+    setStaffIdToDelete(null);
+    showToast('success', `Removed ${staffName} from staff directory.`);
+  };
+
+  const handleConfirmDeleteAccount = (accountId: string, accountName: string) => {
+    if (!currentUser || !isDeveloper) {
+      showToast('error', 'Only Administrators can delete employee accounts.');
+      return;
+    }
+    const res = deleteAccount(currentUser, accountId);
+    if (res.success) {
+      setAccounts(getAllAccounts());
+      setAccountIdToDelete(null);
+      showToast('success', `Deleted account for ${accountName}.`);
+    } else {
+      showToast('error', res.error || 'Failed to delete account.');
     }
   };
 
@@ -218,9 +240,6 @@ export const AccountsManagementView: React.FC<AccountsManagementViewProps> = ({
           <h1 className="text-2xl sm:text-3xl font-bold font-serif-luxury text-[#F3EFEA]">
             Staff &amp; Accounts Management
           </h1>
-          <p className="text-xs text-[#A89F91] mt-1">
-            General hotel associates (Housekeeping, Porters, Maintenance) are listed here for dispatch assignment. Only Front Desk, Housekeeping Supervisors, and Admins require system logins.
-          </p>
         </div>
 
         {/* Action Buttons */}
@@ -334,7 +353,7 @@ export const AccountsManagementView: React.FC<AccountsManagementViewProps> = ({
           <button
             type="button"
             onClick={handleResetDefaults}
-            className="text-[11px] text-[#8E877C] hover:text-[#C5A880] flex items-center gap-1 transition-colors"
+            className="text-[11px] text-[#8E877C] hover:text-[#C5A880] flex items-center gap-1 transition-colors cursor-pointer"
           >
             <RotateCcw className="w-3 h-3" />
             <span className="hidden sm:inline">Reset Default Demo Roster</span>
@@ -384,12 +403,12 @@ export const AccountsManagementView: React.FC<AccountsManagementViewProps> = ({
         </div>
       </div>
 
-      {/* View Section 1: Staff Directory & Associates (No Logins Needed) */}
+      {/* View Section 1: Staff Directory & Associates */}
       {activeSubTab === 'staff_roster' && (
         <div className="space-y-4">
           <div className="flex items-center justify-between text-xs text-[#A89F91]">
             <span>Showing {filteredStaffMembers.length} staff associates</span>
-            <span className="text-[#C5A880] font-medium">Available for Front Desk Task Delegation</span>
+            <span className="text-[#C5A880] font-medium">Available for Task Delegation</span>
           </div>
 
           {filteredStaffMembers.length === 0 ? (
@@ -414,6 +433,7 @@ export const AccountsManagementView: React.FC<AccountsManagementViewProps> = ({
               {filteredStaffMembers.map((staff) => {
                 const isOnDuty = staff.dutyStatus === 'ON_DUTY';
                 const isOnBreak = staff.dutyStatus === 'ON_BREAK';
+                const isConfirmingDelete = staffIdToDelete === staff.id;
 
                 return (
                   <div
@@ -495,23 +515,50 @@ export const AccountsManagementView: React.FC<AccountsManagementViewProps> = ({
                       </div>
                     </div>
 
-                    {/* Card Actions */}
-                    <div className="pt-2 border-t border-[#24211D] flex items-center justify-between">
-                      <span className="text-[10px] text-[#7E786E]">
-                        Registered Associate
-                      </span>
-
-                      {isDeveloper && (
+                    {/* Inline Delete Confirmation or Action Bar */}
+                    {isConfirmingDelete ? (
+                      <div className="pt-2 border-t border-[#24211D] bg-[#2A1215]/80 p-2.5 rounded-xl border border-[#E63946]/40 flex items-center justify-between gap-2">
+                        <span className="text-[11px] text-[#FFCCD5] font-medium">Remove {staff.name}?</span>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => setStaffIdToDelete(null)}
+                            className="px-2 py-0.5 rounded text-[11px] text-[#B8B2A7] hover:bg-[#3D2528]"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleConfirmDeleteStaff(staff.id, staff.name)}
+                            className="px-2.5 py-0.5 rounded bg-[#E63946] text-white font-bold text-[11px] hover:bg-[#D62839]"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="pt-2 border-t border-[#24211D] flex items-center justify-between">
                         <button
                           type="button"
-                          onClick={() => handleDeleteStaff(staff.id, staff.name)}
-                          className="text-xs text-[#E63946] hover:text-[#FF8B94] flex items-center gap-1 font-semibold transition-colors"
+                          onClick={() => setStaffToEdit(staff)}
+                          className="text-xs text-[#C5A880] hover:text-[#E5D5B8] flex items-center gap-1 font-semibold transition-colors cursor-pointer"
                         >
-                          <Trash2 className="w-3.5 h-3.5" />
-                          <span>Remove</span>
+                          <Edit className="w-3.5 h-3.5" />
+                          <span>Edit</span>
                         </button>
-                      )}
-                    </div>
+
+                        {isDeveloper && (
+                          <button
+                            type="button"
+                            onClick={() => setStaffIdToDelete(staff.id)}
+                            className="text-xs text-[#E63946] hover:text-[#FF8B94] flex items-center gap-1 font-semibold transition-colors cursor-pointer"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            <span>Remove</span>
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -532,6 +579,7 @@ export const AccountsManagementView: React.FC<AccountsManagementViewProps> = ({
             {filteredAccounts.map((acc) => {
               const isCurrentSession = currentUser?.id === acc.id;
               const isDev = acc.role === 'developer' || acc.isPrimaryDeveloper;
+              const isConfirmingAccountDelete = accountIdToDelete === acc.id;
 
               return (
                 <div
@@ -573,7 +621,7 @@ export const AccountsManagementView: React.FC<AccountsManagementViewProps> = ({
                         <button
                           type="button"
                           onClick={() => handleSwitchUser(acc)}
-                          className="text-[10px] bg-[#24211D] hover:bg-[#322E29] border border-[#3E3A33] text-[#D8D2C7] px-2 py-0.5 rounded-full font-semibold transition-colors"
+                          className="text-[10px] bg-[#24211D] hover:bg-[#322E29] border border-[#3E3A33] text-[#D8D2C7] px-2 py-0.5 rounded-full font-semibold transition-colors cursor-pointer"
                         >
                           Switch User
                         </button>
@@ -611,33 +659,68 @@ export const AccountsManagementView: React.FC<AccountsManagementViewProps> = ({
                           <KeyRound className="w-3 h-3" />
                           <span>Password</span>
                         </span>
-                        <span className="font-mono text-[#7E786E]">password123</span>
+                        <span className="font-mono text-[#7E786E]">••••••••</span>
                       </div>
                     </div>
                   </div>
 
-                  {/* Actions */}
-                  <div className="pt-2 border-t border-[#24211D] flex items-center justify-between">
-                    <button
-                      type="button"
-                      onClick={() => setAccountToViewProfile(acc)}
-                      className="text-xs text-[#C5A880] hover:text-[#E5D5B8] font-semibold flex items-center gap-1"
-                    >
-                      <User className="w-3.5 h-3.5" />
-                      <span>View Profile</span>
-                    </button>
-
-                    {isDeveloper && (
+                  {/* Inline Delete Confirmation or Action Bar */}
+                  {isConfirmingAccountDelete ? (
+                    <div className="pt-2 border-t border-[#24211D] bg-[#2A1215]/80 p-2.5 rounded-xl border border-[#E63946]/40 flex items-center justify-between gap-2">
+                      <span className="text-[11px] text-[#FFCCD5] font-medium">Delete {acc.name}?</span>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => setAccountIdToDelete(null)}
+                          className="px-2 py-0.5 rounded text-[11px] text-[#B8B2A7] hover:bg-[#3D2528]"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleConfirmDeleteAccount(acc.id, acc.name)}
+                          className="px-2.5 py-0.5 rounded bg-[#E63946] text-white font-bold text-[11px] hover:bg-[#D62839]"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="pt-2 border-t border-[#24211D] flex items-center justify-between gap-2">
                       <button
                         type="button"
-                        onClick={() => setAccountToEdit(acc)}
-                        className="text-xs text-[#D8D2C7] hover:text-white flex items-center gap-1 font-semibold"
+                        onClick={() => setAccountToViewProfile(acc)}
+                        className="text-xs text-[#C5A880] hover:text-[#E5D5B8] font-semibold flex items-center gap-1 cursor-pointer"
                       >
-                        <Edit className="w-3.5 h-3.5" />
-                        <span>Edit</span>
+                        <User className="w-3.5 h-3.5" />
+                        <span>Profile</span>
                       </button>
-                    )}
-                  </div>
+
+                      <div className="flex items-center gap-2">
+                        {isDeveloper && (
+                          <button
+                            type="button"
+                            onClick={() => setAccountToEdit(acc)}
+                            className="text-xs text-[#D8D2C7] hover:text-white flex items-center gap-1 font-semibold cursor-pointer"
+                          >
+                            <Edit className="w-3.5 h-3.5" />
+                            <span>Edit</span>
+                          </button>
+                        )}
+
+                        {isDeveloper && !acc.isPrimaryDeveloper && !isCurrentSession && (
+                          <button
+                            type="button"
+                            onClick={() => setAccountIdToDelete(acc.id)}
+                            className="text-xs text-[#E63946] hover:text-[#FF8B94] flex items-center gap-1 font-semibold cursor-pointer"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            <span>Remove</span>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -665,14 +748,35 @@ export const AccountsManagementView: React.FC<AccountsManagementViewProps> = ({
         }}
       />
 
+      {staffToEdit && (
+        <EditStaffMemberModal
+          isOpen={Boolean(staffToEdit)}
+          staffMember={staffToEdit}
+          currentUser={currentUser}
+          onClose={() => setStaffToEdit(null)}
+          onStaffSaved={(updated) => {
+            setStaffMembers(getAllStaffMembers());
+            showToast('success', `Updated staff member ${updated.name}.`);
+          }}
+          onStaffDeleted={(deletedId) => {
+            setStaffMembers(getAllStaffMembers());
+            showToast('success', 'Staff member removed from directory.');
+          }}
+        />
+      )}
+
       {accountToEdit && (
         <EditAccountModal
           isOpen={Boolean(accountToEdit)}
-          account={accountToEdit}
+          accountToEdit={accountToEdit}
           onClose={() => setAccountToEdit(null)}
-          onAccountUpdated={(updated) => {
+          onAccountSaved={(updated) => {
             setAccounts(getAllAccounts());
             showToast('success', `Updated account for ${updated.name}.`);
+          }}
+          onAccountDeleted={(deletedId) => {
+            setAccounts(getAllAccounts());
+            showToast('success', 'Account deleted.');
           }}
         />
       )}
@@ -680,11 +784,11 @@ export const AccountsManagementView: React.FC<AccountsManagementViewProps> = ({
       {accountToViewProfile && (
         <ProfileModal
           isOpen={Boolean(accountToViewProfile)}
-          account={accountToViewProfile}
+          targetAccount={accountToViewProfile}
           onClose={() => setAccountToViewProfile(null)}
-          onEditRequested={(acc) => {
-            setAccountToViewProfile(null);
-            setAccountToEdit(acc);
+          onProfileUpdated={(updated) => {
+            setAccounts(getAllAccounts());
+            showToast('success', `Updated profile for ${updated.name}.`);
           }}
         />
       )}

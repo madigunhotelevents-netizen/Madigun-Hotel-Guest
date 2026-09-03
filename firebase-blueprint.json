@@ -44,6 +44,43 @@
         "lastLoginAt": { "type": "number" }
       },
       "required": ["id", "username", "name", "role", "dutyStatus"]
+    },
+    "RoomStay": {
+      "title": "RoomStay",
+      "description": "Hotel room occupancy status, dynamic access passcodes, and specifications",
+      "type": "object",
+      "properties": {
+        "roomNumber": { "type": "string" },
+        "status": { "type": "string", "enum": ["OCCUPIED", "CHECKED_OUT"] },
+        "accessCode": { "type": "string" },
+        "guestName": { "type": "string" },
+        "floor": { "type": "number" },
+        "roomType": { "type": "string" },
+        "bedType": { "type": "string" },
+        "checkInAt": { "type": "number" },
+        "checkOutAt": { "type": "number" },
+        "notes": { "type": "string" },
+        "lastUpdated": { "type": "number" }
+      },
+      "required": ["roomNumber", "status"]
+    },
+    "StaffMember": {
+      "title": "StaffMember",
+      "description": "Hotel operational staff roster for dispatch and task assignment",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "roleTitle": { "type": "string" },
+        "department": { "type": "string" },
+        "phone": { "type": "string" },
+        "shift": { "type": "string" },
+        "dutyStatus": { "type": "string", "enum": ["ON_DUTY", "ON_BREAK", "OFF_DUTY"] },
+        "notes": { "type": "string" },
+        "createdAt": { "type": "number" },
+        "createdByAdmin": { "type": "string" }
+      },
+      "required": ["id", "name", "roleTitle", "department", "dutyStatus"]
     }
   },
   "firestore": {
@@ -54,6 +91,14 @@
     "/accounts/{accountId}": {
       "schema": "UserProfile",
       "description": "Collection of all staff and developer accounts"
+    },
+    "/room_stays/{roomNumber}": {
+      "schema": "RoomStay",
+      "description": "Collection of hotel room occupancy and dynamic access passcodes"
+    },
+    "/staff_members/{staffId}": {
+      "schema": "StaffMember",
+      "description": "Collection of hotel staff roster members for request assignments"
     }
   }
 }

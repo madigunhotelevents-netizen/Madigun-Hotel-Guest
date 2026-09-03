@@ -8,8 +8,11 @@ import { Header, AppTab } from './components/Header';
 import { GuestView } from './components/GuestView';
 import { FrontDeskView } from './components/FrontDeskView';
 import { RoomOccupancyView } from './components/RoomOccupancyView';
+import { RecordsMonitoringView } from './components/RecordsMonitoringView';
+import { CheckInCheckOutView } from './components/CheckInCheckOutView';
 import { QRManagementView } from './components/QRManagementView';
 import { AccountsManagementView } from './components/AccountsManagementView';
+import { StaffLoginPage } from './components/StaffLoginPage';
 import { LoginModal } from './components/LoginModal';
 import { ProfileModal } from './components/ProfileModal';
 import { getStoredRequests, subscribeToRequestEvents } from './services/storageService';
@@ -26,17 +29,18 @@ import { UserProfile, DutyStatus } from './types/hotel';
 export default function App() {
   const [activeTab, setActiveTab] = useState<AppTab>('guest');
   const [roomNumber, setRoomNumber] = useState<string>('101');
+  const [isGuestSession, setIsGuestSession] = useState<boolean>(false);
   const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
   const [newRequestsCount, setNewRequestsCount] = useState<number>(0);
-  const [currentUser, setCurrentUserState] = useState<UserProfile | null>(null);
+  const [currentUser, setCurrentUserState] = useState<UserProfile | null>(() => getCurrentUser());
 
   // Modal states
   const [isLoginModalOpen, setIsLoginModalOpen] = useState<boolean>(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState<boolean>(false);
 
   // Helper to extract room number and view mode from URL params, paths, and hashes
-  const parseUrlState = (): { room: string; view: AppTab } => {
-    if (typeof window === 'undefined') return { room: '101', view: 'guest' };
+  const parseUrlState = (): { room: string | null; view: AppTab; hasQrParam: boolean } => {
+    if (typeof window === 'undefined') return { room: null, view: 'guest', hasQrParam: false };
 
     const searchParams = new URLSearchParams(window.location.search);
     let detectedRoom = searchParams.get('room') || searchParams.get('r') || searchParams.get('rm');
@@ -66,39 +70,50 @@ export default function App() {
       }
     }
 
-    // If a room parameter is detected in the URL, it is a guest scanning a QR code!
+    // If a room parameter is detected in the URL, it is a guest scanning a QR code or accessing a room link!
     if (detectedRoom) {
-      return { room: detectedRoom, view: 'guest' };
+      return { room: detectedRoom, view: 'guest', hasQrParam: true };
     }
 
     // Staff explicit views
     if (viewParam === 'frontdesk' || viewParam === 'staff') {
-      return { room: '101', view: 'frontdesk' };
+      return { room: null, view: 'frontdesk', hasQrParam: false };
     }
     if (viewParam === 'occupancy' || viewParam === 'rooms') {
-      return { room: '101', view: 'occupancy' };
+      return { room: null, view: 'occupancy', hasQrParam: false };
+    }
+    if (viewParam === 'records' || viewParam === 'history') {
+      return { room: null, view: 'records', hasQrParam: false };
+    }
+    if (viewParam === 'monitoring' || viewParam === 'stays' || viewParam === 'logs') {
+      return { room: null, view: 'monitoring', hasQrParam: false };
     }
     if (viewParam === 'qr') {
-      return { room: '101', view: 'qr' };
+      return { room: null, view: 'qr', hasQrParam: false };
     }
     if (viewParam === 'accounts' || viewParam === 'employees') {
-      return { room: '101', view: 'accounts' };
+      return { room: null, view: 'accounts', hasQrParam: false };
     }
 
-    // Default: Automatic Guest User Interface
-    return { room: '101', view: 'guest' };
+    return { room: null, view: 'frontdesk', hasQrParam: false };
   };
 
   // Initialize room number and tab from URL
   useEffect(() => {
-    const { room, view } = parseUrlState();
-    setRoomNumber(room);
-    setActiveTab(view);
+    const { room, view, hasQrParam } = parseUrlState();
+    if (room) {
+      setRoomNumber(room);
+    }
+    setIsGuestSession(hasQrParam);
+    setActiveTab(hasQrParam ? 'guest' : view);
 
     const handlePopState = () => {
       const parsed = parseUrlState();
-      setRoomNumber(parsed.room);
-      setActiveTab(parsed.view);
+      if (parsed.room) {
+        setRoomNumber(parsed.room);
+      }
+      setIsGuestSession(parsed.hasQrParam);
+      setActiveTab(parsed.hasQrParam ? 'guest' : parsed.view);
     };
 
     window.addEventListener('popstate', handlePopState);
@@ -135,16 +150,10 @@ export default function App() {
   useEffect(() => {
     const user = getCurrentUser();
     setCurrentUserState(user);
-    if (user && user.role === 'staff') {
-      setActiveTab('frontdesk');
-    }
 
     const unsubscribeAuth = subscribeToAuthEvents(() => {
       const updatedUser = getCurrentUser();
       setCurrentUserState(updatedUser);
-      if (updatedUser && updatedUser.role === 'staff') {
-        setActiveTab('frontdesk');
-      }
     });
 
     return unsubscribeAuth;
@@ -164,7 +173,15 @@ export default function App() {
   const handleLogout = () => {
     logout();
     setCurrentUserState(null);
-    setActiveTab('guest');
+    setIsGuestSession(false);
+    setActiveTab('frontdesk');
+
+    const url = new URL(window.location.href);
+    url.searchParams.delete('room');
+    url.searchParams.delete('r');
+    url.searchParams.delete('rm');
+    url.searchParams.delete('view');
+    window.history.replaceState({}, '', url.pathname);
   };
 
   // Handler when staff clicks "Test Room Screen" from QR generator, Occupancy view, or Front Desk
@@ -177,6 +194,31 @@ export default function App() {
     url.searchParams.delete('view');
     window.history.replaceState({}, '', url.toString());
   };
+
+  // Handler when unauthenticated guest enters room number on login screen
+  const handleGuestRoomAccess = (targetRoom: string) => {
+    setRoomNumber(targetRoom);
+    setIsGuestSession(true);
+    setActiveTab('guest');
+
+    const url = new URL(window.location.href);
+    url.searchParams.set('room', targetRoom);
+    url.searchParams.delete('view');
+    window.history.replaceState({}, '', url.toString());
+  };
+
+  // If NO account is logged in, and NOT a guest QR scan / room session:
+  // Render the Staff & Admin Login Page directly!
+  if (!currentUser && !isGuestSession) {
+    return (
+      <StaffLoginPage
+        onLoginSuccess={(user) => {
+          setCurrentUserState(user);
+          setActiveTab('frontdesk');
+        }}
+      />
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#121110] text-[#F3EFEA] flex flex-col font-sans">
@@ -191,6 +233,7 @@ export default function App() {
             url.searchParams.delete('view');
           } else {
             url.searchParams.set('view', tab);
+            url.searchParams.delete('room');
           }
           window.history.replaceState({}, '', url.toString());
         }}
@@ -199,7 +242,16 @@ export default function App() {
         setSoundEnabled={setSoundEnabled}
         currentRoom={roomNumber}
         currentUser={currentUser}
-        onOpenLogin={() => setIsLoginModalOpen(true)}
+        onOpenLogin={() => {
+          if (!currentUser) {
+            setIsGuestSession(false);
+            const url = new URL(window.location.href);
+            url.searchParams.delete('room');
+            window.history.replaceState({}, '', url.pathname);
+          } else {
+            setIsLoginModalOpen(true);
+          }
+        }}
         onOpenProfile={() => setIsProfileModalOpen(true)}
         onLogout={handleLogout}
         onSetDutyStatus={handleSetDutyStatus}
@@ -207,6 +259,7 @@ export default function App() {
 
       {/* Main Content Body */}
       <main className="flex-1 w-full pb-12">
+        {/* If Guest Session (or staff testing guest view) */}
         {activeTab === 'guest' && (
           <GuestView
             roomNumber={roomNumber}
@@ -215,7 +268,8 @@ export default function App() {
           />
         )}
 
-        {activeTab === 'frontdesk' && (
+        {/* Staff Views (Protected: Only for authenticated Staff/Admin) */}
+        {currentUser && activeTab === 'frontdesk' && (
           <FrontDeskView
             soundEnabled={soundEnabled}
             setSoundEnabled={setSoundEnabled}
@@ -225,20 +279,34 @@ export default function App() {
           />
         )}
 
-        {activeTab === 'occupancy' && (
+        {currentUser && activeTab === 'occupancy' && (
           <RoomOccupancyView
             currentUser={currentUser}
             onSelectRoomForGuestView={handleNavigateToGuestForRoom}
           />
         )}
 
-        {activeTab === 'accounts' && (
+        {currentUser && activeTab === 'records' && (
+          <RecordsMonitoringView
+            currentUser={currentUser}
+            onNavigateToGuest={handleNavigateToGuestForRoom}
+          />
+        )}
+
+        {currentUser && activeTab === 'monitoring' && (
+          <CheckInCheckOutView
+            currentUser={currentUser}
+            onSelectRoomForGuestView={handleNavigateToGuestForRoom}
+          />
+        )}
+
+        {currentUser && activeTab === 'accounts' && (
           <AccountsManagementView
             onOpenLoginModal={() => setIsLoginModalOpen(true)}
           />
         )}
 
-        {activeTab === 'qr' && (
+        {currentUser && activeTab === 'qr' && (
           <QRManagementView
             onTestRoom={handleNavigateToGuestForRoom}
           />
@@ -251,9 +319,7 @@ export default function App() {
         onClose={() => setIsLoginModalOpen(false)}
         onLoginSuccess={(user) => {
           setCurrentUserState(user);
-          if (user.role === 'staff') {
-            setActiveTab('frontdesk');
-          }
+          setActiveTab('frontdesk');
         }}
       />
 

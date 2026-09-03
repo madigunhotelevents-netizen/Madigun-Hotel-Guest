@@ -13,10 +13,12 @@ import {
   LogIn,
   KeyRound,
   Building2,
+  ClipboardList,
+  CalendarCheck2,
 } from 'lucide-react';
 import { UserProfile, DutyStatus } from '../types/hotel';
 
-export type AppTab = 'guest' | 'frontdesk' | 'occupancy' | 'qr' | 'accounts';
+export type AppTab = 'guest' | 'frontdesk' | 'occupancy' | 'records' | 'monitoring' | 'qr' | 'accounts';
 
 interface HeaderProps {
   activeTab: AppTab;
@@ -62,7 +64,12 @@ export const Header: React.FC<HeaderProps> = ({
   }, []);
 
   const isDeveloper = currentUser?.role === 'developer' || currentUser?.isPrimaryDeveloper;
-  const isFrontDeskOrStaff = currentUser && !isDeveloper;
+  const isFrontDesk =
+    currentUser?.role === 'frontdesk' ||
+    currentUser?.department === 'Front Desk' ||
+    currentUser?.title?.toLowerCase().includes('front desk');
+  const isAdmin = isDeveloper || currentUser?.role === 'admin';
+  const canAccessRecordsAndMonitoring = isAdmin || isFrontDesk;
 
   return (
     <header className="sticky top-0 z-40 bg-[#171614]/95 backdrop-blur-md border-b border-[#2C2A26] px-3 sm:px-6 py-2.5 sm:py-3 transition-colors no-print">
@@ -77,10 +84,117 @@ export const Header: React.FC<HeaderProps> = ({
           </span>
         </div>
 
-        {/* Zone 2: Navigation Links */}
-        <nav className="flex items-center gap-1 sm:gap-1.5 overflow-x-auto scrollbar-none py-0.5">
-          {/* Guest View Tab (Visible for Guests and Admin only, hidden when logged in as Front Desk) */}
-          {(!currentUser || isDeveloper) && (
+        {/* Zone 2: Navigation Links (Only shown when a staff member or admin is logged in) */}
+        {currentUser ? (
+          <nav className="flex items-center gap-1 sm:gap-1.5 overflow-x-auto scrollbar-none py-0.5">
+            {/* Front Desk Tab */}
+            <button
+              type="button"
+              id="header-nav-frontdesk"
+              onClick={() => setActiveTab('frontdesk')}
+              className={`whitespace-nowrap shrink-0 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all flex items-center gap-1.5 relative focus-visible:ring-2 focus-visible:ring-[#C5A880] focus-visible:outline-none cursor-pointer ${
+                activeTab === 'frontdesk'
+                  ? 'bg-[#C5A880] text-[#121110] font-semibold shadow-sm'
+                  : 'text-[#B8B2A7] hover:text-[#F3EFEA] hover:bg-[#262421]'
+              }`}
+            >
+              <BellRing className="w-3.5 h-3.5" />
+              <span>Front Desk</span>
+              {newRequestsCount > 0 && (
+                <span className="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-[#E63946] text-white animate-pulse">
+                  {newRequestsCount}
+                </span>
+              )}
+            </button>
+
+            {/* Room Occupancy & Keycards Tab */}
+            <button
+              type="button"
+              id="header-nav-occupancy"
+              onClick={() => setActiveTab('occupancy')}
+              className={`whitespace-nowrap shrink-0 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-[#C5A880] focus-visible:outline-none cursor-pointer ${
+                activeTab === 'occupancy'
+                  ? 'bg-[#C5A880] text-[#121110] font-semibold shadow-sm'
+                  : 'text-[#B8B2A7] hover:text-[#F3EFEA] hover:bg-[#262421]'
+              }`}
+            >
+              <Building2 className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Room Occupancy</span>
+              <span className="sm:hidden">Occupancy</span>
+            </button>
+
+            {/* Request Records Tab (Admin & Front Desk Only) */}
+            {canAccessRecordsAndMonitoring && (
+              <button
+                type="button"
+                id="header-nav-records"
+                onClick={() => setActiveTab('records')}
+                className={`whitespace-nowrap shrink-0 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-[#C5A880] focus-visible:outline-none cursor-pointer ${
+                  activeTab === 'records'
+                    ? 'bg-[#C5A880] text-[#121110] font-semibold shadow-sm'
+                    : 'text-[#B8B2A7] hover:text-[#F3EFEA] hover:bg-[#262421]'
+                }`}
+              >
+                <ClipboardList className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Request Records</span>
+                <span className="sm:hidden">Records</span>
+              </button>
+            )}
+
+            {/* Check-In / Check-Out Monitoring Tab (Admin & Front Desk Only) */}
+            {canAccessRecordsAndMonitoring && (
+              <button
+                type="button"
+                id="header-nav-monitoring"
+                onClick={() => setActiveTab('monitoring')}
+                className={`whitespace-nowrap shrink-0 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-[#C5A880] focus-visible:outline-none cursor-pointer ${
+                  activeTab === 'monitoring'
+                    ? 'bg-[#C5A880] text-[#121110] font-semibold shadow-sm'
+                    : 'text-[#B8B2A7] hover:text-[#F3EFEA] hover:bg-[#262421]'
+                }`}
+              >
+                <CalendarCheck2 className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Check-In/Out Logs</span>
+                <span className="sm:hidden">Stay Logs</span>
+              </button>
+            )}
+
+            {/* Admin-only tabs: Staff & Accounts, QR Stand Cards */}
+            {isAdmin && (
+              <>
+                <button
+                  type="button"
+                  id="header-nav-accounts"
+                  onClick={() => setActiveTab('accounts')}
+                  className={`whitespace-nowrap shrink-0 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-[#C5A880] focus-visible:outline-none cursor-pointer ${
+                    activeTab === 'accounts'
+                      ? 'bg-[#C5A880] text-[#121110] font-semibold shadow-sm'
+                      : 'text-[#B8B2A7] hover:text-[#F3EFEA] hover:bg-[#262421]'
+                  }`}
+                >
+                  <Users className="w-3.5 h-3.5" />
+                  <span>Staff &amp; Accounts</span>
+                  <Crown className="w-3 h-3 text-[#C5A880] hidden sm:inline" />
+                </button>
+
+                <button
+                  type="button"
+                  id="header-nav-qr"
+                  onClick={() => setActiveTab('qr')}
+                  className={`whitespace-nowrap shrink-0 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-[#C5A880] focus-visible:outline-none cursor-pointer ${
+                    activeTab === 'qr'
+                      ? 'bg-[#C5A880] text-[#121110] font-semibold shadow-sm'
+                      : 'text-[#B8B2A7] hover:text-[#F3EFEA] hover:bg-[#262421]'
+                  }`}
+                >
+                  <QrCode className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">QR Cards</span>
+                  <span className="sm:hidden">QR</span>
+                </button>
+              </>
+            )}
+
+            {/* Preview Guest Room Tab for Staff/Admin */}
             <button
               type="button"
               id="header-nav-guest"
@@ -92,85 +206,21 @@ export const Header: React.FC<HeaderProps> = ({
               }`}
             >
               <ConciergeBell className="w-3.5 h-3.5" />
-              <span className="hidden xs:inline">Guest View</span>
-              <span className="xs:hidden">Guest</span>
-              {activeTab === 'guest' && currentRoom ? (
-                <span className="hidden sm:inline opacity-80">(Rm {currentRoom})</span>
+              <span className="hidden xs:inline">Room Preview</span>
+              <span className="xs:hidden">Preview</span>
+              {currentRoom ? (
+                <span className="opacity-80 font-mono text-[11px]">(Rm {currentRoom})</span>
               ) : null}
             </button>
-          )}
-
-          {/* Front Desk Tab (Always available to Front Desk staff and Admins) */}
-          <button
-            type="button"
-            id="header-nav-frontdesk"
-            onClick={() => setActiveTab('frontdesk')}
-            className={`whitespace-nowrap shrink-0 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all flex items-center gap-1.5 relative focus-visible:ring-2 focus-visible:ring-[#C5A880] focus-visible:outline-none cursor-pointer ${
-              activeTab === 'frontdesk'
-                ? 'bg-[#C5A880] text-[#121110] font-semibold shadow-sm'
-                : 'text-[#B8B2A7] hover:text-[#F3EFEA] hover:bg-[#262421]'
-            }`}
-          >
-            <BellRing className="w-3.5 h-3.5" />
-            <span>Front Desk</span>
-            {newRequestsCount > 0 && (
-              <span className="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-[#E63946] text-white animate-pulse">
-                {newRequestsCount}
-              </span>
-            )}
-          </button>
-
-          {/* Room Occupancy & Keycards Tab (Front Desk and Admin) */}
-          <button
-            type="button"
-            id="header-nav-occupancy"
-            onClick={() => setActiveTab('occupancy')}
-            className={`whitespace-nowrap shrink-0 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-[#C5A880] focus-visible:outline-none cursor-pointer ${
-              activeTab === 'occupancy'
-                ? 'bg-[#C5A880] text-[#121110] font-semibold shadow-sm'
-                : 'text-[#B8B2A7] hover:text-[#F3EFEA] hover:bg-[#262421]'
-            }`}
-          >
-            <Building2 className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Room Occupancy</span>
-            <span className="sm:hidden">Occupancy</span>
-          </button>
-
-          {/* Admin-only tabs: Staff & Accounts, QR Stand Cards */}
-          {isDeveloper && (
-            <>
-              <button
-                type="button"
-                id="header-nav-accounts"
-                onClick={() => setActiveTab('accounts')}
-                className={`whitespace-nowrap shrink-0 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-[#C5A880] focus-visible:outline-none cursor-pointer ${
-                  activeTab === 'accounts'
-                    ? 'bg-[#C5A880] text-[#121110] font-semibold shadow-sm'
-                    : 'text-[#B8B2A7] hover:text-[#F3EFEA] hover:bg-[#262421]'
-                }`}
-              >
-                <Users className="w-3.5 h-3.5" />
-                <span>Staff &amp; Accounts</span>
-                <Crown className="w-3 h-3 text-[#C5A880] hidden sm:inline" />
-              </button>
-
-              <button
-                type="button"
-                id="header-nav-qr"
-                onClick={() => setActiveTab('qr')}
-                className={`whitespace-nowrap shrink-0 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-[#C5A880] focus-visible:outline-none cursor-pointer ${
-                  activeTab === 'qr'
-                    ? 'bg-[#C5A880] text-[#121110] font-semibold shadow-sm'
-                    : 'text-[#B8B2A7] hover:text-[#F3EFEA] hover:bg-[#262421]'
-                }`}
-              >
-                <QrCode className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">QR Cards</span>
-                <span className="sm:hidden">QR</span>
-              </button>
-            </>
-          )}
-        </nav>
+          </nav>
+        ) : (
+          <div className="flex items-center gap-2">
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#221E18] border border-[#C5A880]/40 text-[#E5D5B8] text-xs font-semibold">
+              <ConciergeBell className="w-3.5 h-3.5 text-[#C5A880]" />
+              <span>In-Room Portal • Room {currentRoom}</span>
+            </span>
+          </div>
+        )}
 
         {/* Zone 3: User Profile & Sound Actions */}
         <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">

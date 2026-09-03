@@ -13,6 +13,21 @@ import {
 
 const AUTH_CHANNEL_NAME = 'madigun_hotel_auth_channel';
 const FIRESTORE_ACCOUNTS_COLLECTION = 'accounts';
+const SESSION_STORAGE_KEY = 'madigun_hotel_user_session_v2';
+
+function loadSession(): UserProfile | null {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      const saved = window.localStorage.getItem(SESSION_STORAGE_KEY);
+      if (saved) {
+        return JSON.parse(saved);
+      }
+    }
+  } catch (e) {
+    console.warn('Error loading auth session:', e);
+  }
+  return null;
+}
 
 export const INITIAL_ACCOUNTS: UserProfile[] = [
   {
@@ -105,7 +120,7 @@ function notifyAuthChange(type: string, data?: any) {
 }
 
 let accountsCache: UserProfile[] = [...INITIAL_ACCOUNTS];
-let currentLoggedUser: UserProfile | null = null;
+let currentLoggedUser: UserProfile | null = loadSession();
 let isAccountsInitialFetchDone = false;
 let accountsFirestoreUnsubscribe: (() => void) | null = null;
 
@@ -215,6 +230,17 @@ export function getCurrentUser(): UserProfile | null {
 
 export function setCurrentUser(user: UserProfile | null): void {
   currentLoggedUser = user;
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      if (user) {
+        window.localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(user));
+      } else {
+        window.localStorage.removeItem(SESSION_STORAGE_KEY);
+      }
+    }
+  } catch (e) {
+    console.warn('Error saving auth session:', e);
+  }
   notifyAuthChange('AUTH_STATE_CHANGED', { user });
 }
 

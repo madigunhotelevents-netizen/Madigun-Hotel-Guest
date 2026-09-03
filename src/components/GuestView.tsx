@@ -333,9 +333,6 @@ export const GuestView: React.FC<GuestViewProps> = ({
         <h1 className="text-2xl sm:text-3xl font-bold font-serif-luxury tracking-wide text-[#F3EFEA] pt-1">
           MADIGUN HOTEL &amp; EVENTS
         </h1>
-        <p className="text-xs text-[#A89F91]">
-          Digital In-Room Concierge &amp; Hospitality Services
-        </p>
       </div>
 
       {/* Service Schedule Timer Banner (10 PM to 6 AM Off Duty) */}
@@ -403,9 +400,6 @@ export const GuestView: React.FC<GuestViewProps> = ({
                     Emergency Assistance
                   </h3>
                 </div>
-                <span className="text-xs text-[#FCA5A5] block">
-                  Immediate dispatch for medical or safety concerns
-                </span>
               </div>
             </div>
             <ChevronRight className="w-5 h-5 text-[#E63946] shrink-0 group-hover:translate-x-0.5 transition-transform" />
@@ -430,9 +424,6 @@ export const GuestView: React.FC<GuestViewProps> = ({
                 <h3 className="text-xs sm:text-sm font-bold text-[#F3EFEA] tracking-wide group-hover:text-[#C5A880] transition-colors truncate">
                   {cat.label}
                 </h3>
-                <span className="text-[11px] text-[#8E877C] line-clamp-1 block">
-                  {cat.description}
-                </span>
               </div>
             </div>
             <ChevronRight className="w-4 h-4 text-[#8E877C] group-hover:text-[#C5A880] group-hover:translate-x-0.5 transition-all shrink-0" />
